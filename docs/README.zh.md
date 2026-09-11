@@ -75,7 +75,7 @@ Explore 汇总精选仓库中的 Skill，并支持在线搜索。点击 Install 
 
 ## 支持的 AI 编程工具
 
-当前内置 47 个工具适配，并支持通过管理中心添加自定义工具目录。项目级 skills 目录相对所选项目根目录；标记为“不支持”的工具尚未确认项目级 skills 目录，仅支持全局同步。
+当前内置 48 个工具适配，并支持通过管理中心添加自定义工具目录。项目级 skills 目录相对所选项目根目录；标记为“不支持”的工具尚未确认项目级 skills 目录，仅支持全局同步。
 
 | tool key | 工具 | 全局 skills 目录（相对 `~`） | 项目级 skills 目录（相对项目根目录） | 存在即视为已安装（相对 `~`） |
 | --- | --- | --- | --- | --- |
@@ -83,6 +83,7 @@ Explore 汇总精选仓库中的 Skill，并支持在线搜索。点击 Install 
 | `claude_code` | Claude Code | `.claude/skills` | `.claude/skills` | `.claude` |
 | `codex` | Codex | `.codex/skills` | `.agents/skills` | `.codex` |
 | `deepseek_harness` | DeepSeek Harness | `.dsh/skills` | `.dsh/skills` | `.dsh` |
+| `zcode` | ZCode | `.zcode/skills` | `.zcode/skills` | `.zcode` |
 | `opencode` | OpenCode | `.config/opencode/skills` | `.agents/skills` | `.config/opencode` |
 | `antigravity` | Antigravity | `.gemini/config/skills` | `.agents/skills` | `.gemini/config` |
 | `amp` | Amp | `.config/agents/skills` | `.agents/skills` | `.config/agents` |
