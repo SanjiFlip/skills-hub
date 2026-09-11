@@ -8,14 +8,23 @@ import { fileURLToPath } from 'node:url'
 
 describe('desktop OAuth build configuration', () => {
   it('exits before building when configuration is missing and reports configured without printing its value', () => {
-    const env = { ...process.env }
-    delete env.SKILLS_HUB_GITHUB_CLIENT_ID
-    const run = value => spawnSync(process.execPath, [fileURLToPath(new URL('./build-desktop.mjs', import.meta.url)), '--check-oauth-only'], { env: value, encoding: 'utf8' })
-    expect(run(env).status).toBe(1)
-    const configured = run({ ...env, SKILLS_HUB_GITHUB_CLIENT_ID: 'Ov23liPublicTest12345' })
-    expect(configured.status).toBe(0)
-    expect(configured.stdout).toContain('configured')
-    expect(configured.stdout + configured.stderr).not.toContain('Ov23liPublicTest12345')
+    const root = mkdtempSync(path.join(tmpdir(), 'skills-hub-build-'))
+    const scripts = path.join(root, 'scripts')
+    const copied = path.join(scripts, 'build-desktop.mjs')
+    try {
+      mkdirSync(scripts)
+      copyFileSync(fileURLToPath(new URL('./build-desktop.mjs', import.meta.url)), copied)
+      const env = { ...process.env }
+      delete env.SKILLS_HUB_GITHUB_CLIENT_ID
+      const run = value => spawnSync(process.execPath, [realpathSync(copied), '--check-oauth-only'], { env: value, encoding: 'utf8' })
+      expect(run(env).status).toBe(1)
+      const configured = run({ ...env, SKILLS_HUB_GITHUB_CLIENT_ID: 'Ov23liPublicTest12345' })
+      expect(configured.status).toBe(0)
+      expect(configured.stdout).toContain('configured')
+      expect(configured.stdout + configured.stderr).not.toContain('Ov23liPublicTest12345')
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
   })
   it('stops a build without a usable public client ID', () => {
     for (const value of [undefined, '', '  ', 'ghp_this_is_a_user_token', '${SECRET}', 'secret value']) {
