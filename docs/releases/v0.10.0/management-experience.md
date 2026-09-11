@@ -1,8 +1,8 @@
-# Skill 管理与安装体验改进
+# Skill 与工具管理体验改进
 
-本文汇总 v0.10.0 对 My Skills、安装选择、异常提示和详情页面的用户体验修复。
+本文汇总 v0.10.0 对 My Skills、安装选择、异常提示、详情页面和内置工具支持的用户体验改进。
 
-相关 PR：[#124](https://github.com/qufei1993/skills-hub/pull/124)、[#132](https://github.com/qufei1993/skills-hub/pull/132)、[#133](https://github.com/qufei1993/skills-hub/pull/133)、[#136](https://github.com/qufei1993/skills-hub/pull/136)、[#138](https://github.com/qufei1993/skills-hub/pull/138)。
+相关 PR：[#124](https://github.com/qufei1993/skills-hub/pull/124)、[#132](https://github.com/qufei1993/skills-hub/pull/132)、[#133](https://github.com/qufei1993/skills-hub/pull/133)、[#136](https://github.com/qufei1993/skills-hub/pull/136)、[#138](https://github.com/qufei1993/skills-hub/pull/138)、[#146](https://github.com/qufei1993/skills-hub/pull/146)。
 
 ## My Skills 顶部与筛选
 
@@ -38,6 +38,18 @@ Skill 卡片仅在需要处理时，于复制按钮旁显示警告图标。点�
 
 本地原始来源不存在时，Skill 仍会显示来源异常，但提示条只占自身内容高度，不再把标题、文件树和文件内容挤出可视区域。详情页继续读取中央仓库中的托管副本，因此用户仍可检查已有文件；来源异常和更新保护不会被隐藏或清除。
 
+## ZCode 内置工具支持
+
+[Issue #144](https://github.com/qufei1993/skills-hub/issues/144) 请求将 ZCode 加入内置工具。[PR #146](https://github.com/qufei1993/skills-hub/pull/146) 完成适配后，内置工具数量增加到 48 个。
+
+- 工具键为 `zcode`，界面名称为 ZCode，并使用 Z.ai 产品图标。
+- 全局 Skill 目录为 `~/.zcode/skills`。
+- 项目级 Skill 目录为 `.zcode/skills`。
+- 通过 `~/.zcode` 检测 ZCode 是否安装。
+- ZCode 会出现在工具管理、安装和 Skill 同步流程中；已有的 `~/.zcode/skills` 内容可由发现流程识别并导入。
+
+适配器回归测试覆盖全局路径、项目路径、检测路径和项目级同步能力；中英文支持矩阵同步更新为 48 个内置工具。
+
 ## 设计边界
 
 - 不改变 Skill 卡片的健康状态判断。
@@ -47,4 +59,4 @@ Skill 卡片仅在需要处理时，于复制按钮旁显示警告图标。点�
 
 ## 验证范围
 
-前端回归覆盖范围和标签计数、隐藏批量选择、筛选无结果、清除筛选、标签管理跳转、Git 与本地候选搜索、无效候选、加载状态、警告浮层关闭方式，以及来源缺失时详情布局。上述关键用例均在旧行为下复现失败，并在修复后通过。
+前端回归覆盖范围和标签计数、隐藏批量选择、筛选无结果、清除筛选、标签管理跳转、Git 与本地候选搜索、无效候选、加载状态、警告浮层关闭方式，以及来源缺失时详情布局。工具适配器测试另行覆盖 ZCode 的路径和项目级能力。上述关键修复用例均在旧行为下复现失败，并在修复后通过。

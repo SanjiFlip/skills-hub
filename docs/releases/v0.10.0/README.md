@@ -1,6 +1,6 @@
 # Skills Hub v0.10.0
 
-v0.10.0 的重点是在多台设备间安全同步已托管的 Skill 库。本版本还新增独立本机回收站和韩文界面，并加强 Skill 生命周期安全与管理体验。
+v0.10.0 的重点是在多台设备间安全同步已托管的 Skill 库。本版本还新增独立本机回收站、韩文界面和 ZCode 内置适配，并加强 Skill 生命周期安全与管理体验。
 
 ## 主要功能
 
@@ -12,9 +12,9 @@ v0.10.0 的重点是在多台设备间安全同步已托管的 Skill 库。本�
 
 删除的 Skill 会在当前设备保留 30 天。恢复时会还原文件及已保存的描述、标签、启用状态、来源信息和可恢复的工具关系；应用启动时及运行期间每天清理过期项目。
 
-### 更安全的管理与更多语言
+### 更安全的管理、更多语言与工具
 
-存储迁移、自动更新、删除及工具副本刷新会保护本地原始来源和被独立修改的文件。My Skills 使用更紧凑的范围筛选，并确保批量操作只处理当前可见选择。界面支持英文、简体中文和韩文。
+存储迁移、自动更新、删除及工具副本刷新会保护本地原始来源和被独立修改的文件。My Skills 使用更紧凑的范围筛选，并确保批量操作只处理当前可见选择。界面支持英文、简体中文和韩文；内置工具增加到 48 个，并新增 ZCode 的全局及项目级 Skill 同步。
 
 ## Issue 与 PR
 
@@ -30,6 +30,7 @@ v0.10.0 的重点是在多台设备间安全同步已托管的 Skill 库。本�
 | 来源缺失时的 Skill 详情 | — | [#138](https://github.com/qufei1993/skills-hub/pull/138) | — |
 | Kimi Code CLI 路径与图标 | [#122](https://github.com/qufei1993/skills-hub/issues/122) | [#126](https://github.com/qufei1993/skills-hub/pull/126) | — |
 | Windows/MSVC Rust 构建 | [#142](https://github.com/qufei1993/skills-hub/issues/142) | [#143](https://github.com/qufei1993/skills-hub/pull/143) | — |
+| ZCode 工具适配 | [#144](https://github.com/qufei1993/skills-hub/issues/144) | [#146](https://github.com/qufei1993/skills-hub/pull/146) | — |
 
 [PR #130](https://github.com/qufei1993/skills-hub/pull/130) 仅包含测试环境清理，因此不列入面向用户的更新日志。
 
@@ -47,7 +48,7 @@ v0.10.0 的重点是在多台设备间安全同步已托管的 Skill 库。本�
 
 ### 管理与安装
 
-- [Skill 管理与安装体验改进](management-experience.md)：My Skills 筛选、批量操作、安装候选、异常提示和详情布局。
+- [Skill 与工具管理体验改进](management-experience.md)：My Skills 筛选、批量操作、安装候选、异常提示、详情布局和 ZCode 内置适配。
 - [嵌套 Git Skill 发现修复](bugfix-nested-skill-discovery.md)：Issue #129 的问题、扫描边界和验证。
 
 ### 发布构建
