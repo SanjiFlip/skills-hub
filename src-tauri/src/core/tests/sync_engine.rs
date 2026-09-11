@@ -1,4 +1,5 @@
 use std::fs;
+#[cfg(unix)]
 use std::path::PathBuf;
 
 use crate::core::sync_engine::{
