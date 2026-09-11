@@ -126,6 +126,89 @@ fn cleanup_removes_only_expired_items_and_their_files() {
 }
 
 #[test]
+fn clear_removes_all_items_and_their_files() {
+    let root = tempfile::tempdir().unwrap();
+    let store = SkillStore::new(root.path().join("store.db"));
+    store.ensure_schema().unwrap();
+    let service = RecycleBinService::new(&store, root.path().join("trash"));
+    let first = skill(root.path());
+    fs::create_dir_all(&first.central_path).unwrap();
+    fs::write(
+        std::path::Path::new(&first.central_path).join("SKILL.md"),
+        "first",
+    )
+    .unwrap();
+    store.upsert_skill(&first).unwrap();
+    let first_item = service
+        .archive(&first.id, DeletionSource::Manual, 1_000)
+        .unwrap();
+
+    let mut second = skill(root.path());
+    second.id = "skill-2".into();
+    second.name = "second".into();
+    second.central_path = root.path().join("central/second").to_string_lossy().into();
+    fs::create_dir_all(&second.central_path).unwrap();
+    fs::write(
+        std::path::Path::new(&second.central_path).join("SKILL.md"),
+        "second",
+    )
+    .unwrap();
+    store.upsert_skill(&second).unwrap();
+    let second_item = service
+        .archive(&second.id, DeletionSource::Sync, 2_000)
+        .unwrap();
+
+    assert_eq!(
+        service
+            .clear(&[first_item.id.clone(), second_item.id.clone()])
+            .unwrap(),
+        2
+    );
+    assert!(service.list().unwrap().is_empty());
+    assert!(!std::path::Path::new(&first_item.trash_path).exists());
+    assert!(!std::path::Path::new(&second_item.trash_path).exists());
+}
+
+#[test]
+fn clear_rejects_a_changed_recycle_bin_snapshot() {
+    let root = tempfile::tempdir().unwrap();
+    let store = SkillStore::new(root.path().join("store.db"));
+    store.ensure_schema().unwrap();
+    let service = RecycleBinService::new(&store, root.path().join("trash"));
+    let first = skill(root.path());
+    fs::create_dir_all(&first.central_path).unwrap();
+    fs::write(
+        std::path::Path::new(&first.central_path).join("SKILL.md"),
+        "first",
+    )
+    .unwrap();
+    store.upsert_skill(&first).unwrap();
+    let confirmed = service
+        .archive(&first.id, DeletionSource::Manual, 1_000)
+        .unwrap();
+
+    let mut second = skill(root.path());
+    second.id = "skill-2".into();
+    second.name = "second".into();
+    second.central_path = root.path().join("central/second").to_string_lossy().into();
+    fs::create_dir_all(&second.central_path).unwrap();
+    fs::write(
+        std::path::Path::new(&second.central_path).join("SKILL.md"),
+        "second",
+    )
+    .unwrap();
+    store.upsert_skill(&second).unwrap();
+    let added = service
+        .archive(&second.id, DeletionSource::Sync, 2_000)
+        .unwrap();
+
+    let error = service.clear(&[confirmed.id]).unwrap_err();
+    assert!(error.to_string().contains("RECYCLE_BIN_CHANGED"));
+    assert_eq!(service.list().unwrap().len(), 2);
+    assert!(std::path::Path::new(&added.trash_path).exists());
+}
+
+#[test]
 fn failed_restore_removes_its_new_copy_and_keeps_the_recycle_bin_item() {
     let root = tempfile::tempdir().unwrap();
     let store = SkillStore::new(root.path().join("store.db"));

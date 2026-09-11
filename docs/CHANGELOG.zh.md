@@ -10,6 +10,7 @@
 - **ZCode 工具适配**：新增第 48 个内置工具 ZCode，通过 `~/.zcode/skills` 和 `.zcode/skills` 支持全局及项目级 Skill 同步，通过 `~/.zcode` 检测安装，并在工具管理和同步流程中展示 Z.ai 产品图标（修复 [#144](https://github.com/qufei1993/skills-hub/issues/144)，[PR #146](https://github.com/qufei1993/skills-hub/pull/146)）。
 - **多设备 Skill 库同步**：实现 [#56](https://github.com/qufei1993/skills-hub/issues/56) 提出的多设备同步需求。现在可通过 GitHub、GitLab 或 Gitee 仓库同步 Skill 文件、描述和标签，并支持已配置的浏览器授权、Token/SSH 备用连接、仓库选择、只读检查、手动同步、可选的启动同步及按间隔或每日定时同步（[PR #127](https://github.com/qufei1993/skills-hub/pull/127)）。
 - **独立回收站**：删除的 Skill 在当前设备保留 30 天，可恢复文件和已保存的本机配置；应用启动时及运行期间每天自动清理过期项目（[PR #140](https://github.com/qufei1993/skills-hub/pull/140)）。
+- **一键清空回收站**：新增永久删除回收站全部项目的快捷操作，并通过类似 GitHub 的输入确认及本地化错误提示防止误操作。
 - **韩文界面语言**：新增韩文翻译、三语言选择器及语言偏好持久化；韩文用户在应用更新界面中查看英文更新日志（[PR #135](https://github.com/qufei1993/skills-hub/pull/135)）。
 
 ### 优化

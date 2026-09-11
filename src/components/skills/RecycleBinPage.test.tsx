@@ -12,6 +12,16 @@ const entries = [{
   targets: [{ id: 'target-1', skill_id: 'skill-1', tool: 'claude-code', scope: 'global', project_path: null, target_path: '/tmp/claude/wechat-article', mode: 'copy', status: 'ok' }],
   trash_path: '/tmp/trash-1',
 }]
+const secondEntry = {
+  ...entries[0],
+  id: 'trash-2',
+  skill_id: 'skill-2',
+  skill_name: 'other-skill',
+  description: 'Another deleted Skill',
+  tags: [],
+  targets: [],
+  trash_path: '/tmp/trash-2',
+}
 
 afterEach(cleanup)
 
@@ -100,5 +110,60 @@ describe('RecycleBinPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'recycleBin.deletePermanently' }))
     fireEvent.click(screen.getByRole('button', { name: 'recycleBin.confirmDelete' }))
     await waitFor(() => expect(invoke).toHaveBeenCalledWith('delete_recycle_bin_item', { trashId: 'trash-1' }))
+  })
+
+  it('requires the confirmation phrase before clearing the recycle bin', async () => {
+    let currentEntries = [...entries, secondEntry]
+    const invoke = vi.fn(async (command: string, args?: Record<string, unknown>) => {
+      if (command === 'get_recycle_bin_items') return currentEntries
+      if (command === 'clear_recycle_bin') {
+        if (JSON.stringify(args) !== JSON.stringify({ trashIds: ['trash-1', 'trash-2'] })) throw new Error('wrong snapshot')
+        currentEntries = []
+        return 2
+      }
+      throw new Error(command)
+    })
+    render(<RecycleBinPage active installedTools={[]} isTauri invokeTauri={invoke} onChanged={() => undefined} t={(key, options) => key === 'recycleBin.clearConfirmHelp' ? `count:${options?.count}` : key} />)
+
+    await screen.findAllByText('wechat-article')
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'wechat' } })
+    expect(screen.queryByText('other-skill')).toBeNull()
+    const clearButton = screen.getByRole('button', { name: 'recycleBin.clearAll' })
+    clearButton.focus()
+    fireEvent.click(clearButton)
+    expect(screen.getByText('count:2')).toBeTruthy()
+    const confirm = screen.getByRole<HTMLButtonElement>('button', { name: 'recycleBin.confirmClear' })
+    expect(confirm.disabled).toBe(true)
+    fireEvent.change(screen.getByRole('textbox', { name: 'recycleBin.clearConfirmLabel' }), { target: { value: 'wrong' } })
+    expect(confirm.disabled).toBe(true)
+    fireEvent.change(screen.getByRole('textbox', { name: 'recycleBin.clearConfirmLabel' }), { target: { value: 'recycleBin.clearConfirmPhrase' } })
+    expect(confirm.disabled).toBe(false)
+    fireEvent.click(confirm)
+
+    await screen.findByText('recycleBin.noResults')
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: '' } })
+    expect(await screen.findByText('recycleBin.empty')).toBeTruthy()
+    expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'recycleBin.title' }))
+  })
+
+  it('reloads the list and requires a new confirmation when the snapshot changes', async () => {
+    let currentEntries = entries
+    const invoke = vi.fn(async (command: string) => {
+      if (command === 'get_recycle_bin_items') return currentEntries
+      if (command === 'clear_recycle_bin') {
+        currentEntries = [...entries, secondEntry]
+        throw new Error('RECYCLE_BIN_CHANGED')
+      }
+      throw new Error(command)
+    })
+    render(<RecycleBinPage active installedTools={[]} isTauri invokeTauri={invoke} onChanged={() => undefined} t={(key) => key} />)
+
+    await screen.findAllByText('wechat-article')
+    fireEvent.click(screen.getByRole('button', { name: 'recycleBin.clearAll' }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'recycleBin.clearConfirmLabel' }), { target: { value: 'recycleBin.clearConfirmPhrase' } })
+    fireEvent.click(screen.getByRole('button', { name: 'recycleBin.confirmClear' }))
+
+    expect((await screen.findAllByText('other-skill')).length).toBeGreaterThan(0)
+    expect(screen.queryByRole('dialog')).toBeNull()
   })
 })

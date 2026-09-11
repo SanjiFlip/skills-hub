@@ -1,4 +1,4 @@
-import { memo, useEffect, useId, useRef, type ReactNode } from 'react'
+import { memo, useEffect, useId, useRef, type ReactNode, type RefObject } from 'react'
 import { Trash2, TriangleAlert } from 'lucide-react'
 
 type ConfirmActionModalProps = {
@@ -9,6 +9,8 @@ type ConfirmActionModalProps = {
   body: ReactNode
   cancelLabel: string
   confirmLabel: string
+  confirmDisabled?: boolean
+  returnFocusRef?: RefObject<HTMLElement | null>
   onRequestClose: () => void
   onConfirm: () => void
 }
@@ -21,6 +23,8 @@ const ConfirmActionModal = ({
   body,
   cancelLabel,
   confirmLabel,
+  confirmDisabled = false,
+  returnFocusRef,
   onRequestClose,
   onConfirm,
 }: ConfirmActionModalProps) => {
@@ -38,6 +42,7 @@ const ConfirmActionModal = ({
   useEffect(() => {
     if (!open) return
     const previouslyFocused = document.activeElement
+    const fallbackFocus = returnFocusRef?.current
     const dialog = dialogRef.current
     const focusableSelector =
       'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
@@ -71,9 +76,13 @@ const ConfirmActionModal = ({
     document.addEventListener('keydown', handleKeyDown)
     return () => {
       document.removeEventListener('keydown', handleKeyDown)
-      if (previouslyFocused instanceof HTMLElement) previouslyFocused.focus()
+      if (previouslyFocused instanceof HTMLElement && previouslyFocused.isConnected && !previouslyFocused.matches(':disabled')) {
+        previouslyFocused.focus()
+      } else {
+        fallbackFocus?.focus()
+      }
     }
-  }, [open])
+  }, [open, returnFocusRef])
 
   if (!open) return null
 
@@ -114,7 +123,7 @@ const ConfirmActionModal = ({
             className={`btn ${recoverable ? 'btn-danger' : 'btn-danger-solid'}`}
             type="button"
             onClick={onConfirm}
-            disabled={loading}
+            disabled={loading || confirmDisabled}
           >
             {confirmLabel}
           </button>

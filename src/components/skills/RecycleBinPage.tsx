@@ -36,12 +36,17 @@ const RecycleBinPage = ({ installedTools, active, isTauri, invokeTauri, onChange
   const [locations, setLocations] = useState<RecycleBinLocations | null>(null)
   const [locationsFailed, setLocationsFailed] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
+  const titleRef = useRef<HTMLHeadingElement>(null)
   const helpRef = useRef<HTMLDivElement>(null)
   const helpButtonRef = useRef<HTMLButtonElement>(null)
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [confirmClear, setConfirmClear] = useState(false)
+  const [clearConfirmation, setClearConfirmation] = useState('')
+  const [clearIds, setClearIds] = useState<string[]>([])
+  const [clearing, setClearing] = useState(false)
 
   const load = useCallback(async () => {
     if (!isTauri) return
@@ -143,12 +148,32 @@ const RecycleBinPage = ({ installedTools, active, isTauri, invokeTauri, onChange
     } finally { setBusy(null) }
   }
 
+  const clear = async () => {
+    setClearing(true)
+    try {
+      const removed = await invokeTauri('clear_recycle_bin', { trashIds: clearIds }) as number
+      toast.success(t('recycleBin.cleared', { count: removed }))
+      setConfirmClear(false)
+      setClearConfirmation('')
+      setClearIds([])
+    } catch (error) {
+      toast.error(formatRecycleBinError(error, 'clear', t))
+      setConfirmClear(false)
+      setClearConfirmation('')
+      setClearIds([])
+    } finally {
+      await load()
+      onChanged()
+      setClearing(false)
+    }
+  }
+
   if (!active) return null
 
   return <div className="recycle-bin-page">
     <header className="recycle-bin-header">
       <div className="recycle-bin-heading">
-        <div className="recycle-bin-title-line"><h1>{t('recycleBin.title')}</h1><span className="recycle-bin-count">{t('recycleBin.count', { count: visible.length })}</span></div>
+        <div className="recycle-bin-title-line"><h1 ref={titleRef} tabIndex={-1}>{t('recycleBin.title')}</h1><span className="recycle-bin-count">{t('recycleBin.count', { count: visible.length })}</span></div>
         <div className="recycle-bin-intro"><p>{t('recycleBin.subtitle')}</p>
       <div className="recycle-bin-help" ref={helpRef}>
         <button ref={helpButtonRef} className="recycle-bin-help-trigger" type="button" aria-expanded={helpOpen} aria-controls="recycle-bin-help-content" onClick={() => setHelpOpen((open) => !open)}><CircleHelp size={16} />{t('recycleBin.helpTitle')}</button>
@@ -161,7 +186,10 @@ const RecycleBinPage = ({ installedTools, active, isTauri, invokeTauri, onChange
         </div>
       </div>
       <div className="recycle-bin-header-tools">
-        <label className="recycle-bin-search"><Search size={16} /><input aria-label={t('recycleBin.search')} type="search" value={query} placeholder={t('recycleBin.search')} onChange={(event) => setQuery(event.target.value)} /></label>
+        <div className="recycle-bin-header-actions">
+          <label className="recycle-bin-search"><Search size={16} /><input aria-label={t('recycleBin.search')} type="search" value={query} placeholder={t('recycleBin.search')} onChange={(event) => setQuery(event.target.value)} /></label>
+          <button className="btn btn-danger-ghost recycle-bin-clear" type="button" disabled={loading || clearing || items.length === 0} onClick={() => { setClearIds(items.map((item) => item.id)); setConfirmClear(true) }}><Trash2 size={15} />{t('recycleBin.clearAll')}</button>
+        </div>
         <small>{t('recycleBin.newestFirst')}</small>
       </div>
     </header>
@@ -220,6 +248,15 @@ const RecycleBinPage = ({ installedTools, active, isTauri, invokeTauri, onChange
       body={t('recycleBin.confirmHelp', { name: selected?.skill_name ?? '' })}
       cancelLabel={t('cancel')} confirmLabel={t('recycleBin.confirmDelete')}
       onRequestClose={() => setConfirmDelete(false)} onConfirm={() => void remove()}
+    />
+    <ConfirmActionModal
+      open={confirmClear} loading={clearing}
+      title={t('recycleBin.clearConfirmTitle')}
+      body={<><p>{t('recycleBin.clearConfirmHelp', { count: clearIds.length })}</p><label className="recycle-bin-clear-confirm"><span>{t('recycleBin.clearConfirmInstruction', { phrase: t('recycleBin.clearConfirmPhrase') })}</span><input type="text" aria-label={t('recycleBin.clearConfirmLabel')} autoComplete="off" disabled={clearing} value={clearConfirmation} onChange={(event) => setClearConfirmation(event.target.value)} /></label></>}
+      cancelLabel={t('cancel')} confirmLabel={t('recycleBin.confirmClear')}
+      confirmDisabled={clearConfirmation !== t('recycleBin.clearConfirmPhrase')}
+      returnFocusRef={titleRef}
+      onRequestClose={() => { setConfirmClear(false); setClearConfirmation(''); setClearIds([]) }} onConfirm={() => void clear()}
     />
   </div>
 }

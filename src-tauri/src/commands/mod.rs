@@ -2708,6 +2708,23 @@ pub async fn delete_recycle_bin_item(
 
 #[tauri::command]
 #[allow(non_snake_case)]
+pub async fn clear_recycle_bin(
+    app: tauri::AppHandle,
+    store: State<'_, SkillStore>,
+    trashIds: Vec<String>,
+) -> Result<usize, String> {
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let root = app.path().app_data_dir()?.join("recycle-bin");
+        RecycleBinService::new(&store, root).clear(&trashIds)
+    })
+    .await
+    .map_err(|err| err.to_string())?
+    .map_err(format_anyhow_error)
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
 pub async fn resolve_device_sync_conflict(
     app: tauri::AppHandle,
     store: State<'_, SkillStore>,
