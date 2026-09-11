@@ -137,6 +137,14 @@ Explore 汇总精选仓库中的 Skill，并支持在线搜索。点击 Install 
 - Rust（stable）
 - Tauri 系统依赖（按官方文档安装）
 
+首次启动桌面应用或构建安装包前，创建本地 OAuth 配置：
+
+```bash
+cp .env.example .env
+```
+
+将占位值替换为团队提供的 GitHub OAuth 公开 Client ID。Debug 启动和本地 `npm run tauri:build*` 命令都会自动读取根目录 `.env`。不要填写 Client Secret 或用户 Token，也不要提交 `.env`。
+
 ### 启动（桌面端）
 
 ```bash

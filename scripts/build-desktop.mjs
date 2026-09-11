@@ -29,6 +29,9 @@ function main(args) {
     // This is data, never a shell script or dotenv environment import.
     try { contents = readFileSync(filename, 'utf8') } catch { throw new Error('Cannot read --oauth-env-file.') }
     args.splice(index, 2)
+  } else if (process.env[key] === undefined) {
+    const filename = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '.env')
+    try { contents = readFileSync(filename, 'utf8') } catch { /* Report the existing missing configuration error below. */ }
   }
   const clientId = resolveGithubClientId(process.env, contents)
   const checkOnly = args.includes('--check-oauth-only')

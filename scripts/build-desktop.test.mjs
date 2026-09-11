@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { resolveGithubClientId } from './build-desktop.mjs'
 import { spawnSync } from 'node:child_process'
+import { copyFileSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 describe('desktop OAuth build configuration', () => {
@@ -24,6 +27,26 @@ describe('desktop OAuth build configuration', () => {
   })
   it('uses explicit build environment instead of local fallback', () => {
     expect(resolveGithubClientId({ SKILLS_HUB_GITHUB_CLIENT_ID: 'Ov23liFromBuild12345' }, 'SKILLS_HUB_GITHUB_CLIENT_ID=Ov23liFromFile12345')).toBe('Ov23liFromBuild12345')
+  })
+  it('uses the repository .env when no build environment or explicit file is provided', () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'skills-hub-build-'))
+    const scripts = path.join(root, 'scripts')
+    const source = fileURLToPath(new URL('./build-desktop.mjs', import.meta.url))
+    const copied = path.join(scripts, 'build-desktop.mjs')
+    const clientId = 'Ov23liLocalBuild12345'
+    try {
+      mkdirSync(scripts)
+      copyFileSync(source, copied)
+      writeFileSync(path.join(root, '.env'), `SKILLS_HUB_GITHUB_CLIENT_ID=${clientId}\n`)
+      const env = { ...process.env }
+      delete env.SKILLS_HUB_GITHUB_CLIENT_ID
+      const result = spawnSync(process.execPath, [realpathSync(copied), '--check-oauth-only'], { env, encoding: 'utf8' })
+      expect(result.status).toBe(0)
+      expect(result.stdout).toContain('configured')
+      expect(result.stdout + result.stderr).not.toContain(clientId)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
   })
   it('rejects duplicate or malformed keys without echoing input', () => {
     for (const file of ['SKILLS_HUB_GITHUB_CLIENT_ID=first\nSKILLS_HUB_GITHUB_CLIENT_ID=second', 'SKILLS_HUB_GITHUB_CLIENT_ID=$(echo private-secret)', 'SKILLS_HUB_GITHUB_CLIENT_ID="unterminated-private-secret']) {

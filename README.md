@@ -140,6 +140,14 @@ See [`src-tauri/src/core/tool_adapters/mod.rs`](src-tauri/src/core/tool_adapters
 - Rust (stable)
 - Tauri system dependencies (follow Tauri official docs for your OS)
 
+Create the local OAuth configuration once before starting the desktop app or building an installer:
+
+```bash
+cp .env.example .env
+```
+
+Replace the placeholder with the team's GitHub OAuth public Client ID. Debug runs and local `npm run tauri:build*` commands load the root `.env` automatically. Never add a client secret or user token, and do not commit `.env`.
+
 ```bash
 npm install
 npm run tauri:dev
