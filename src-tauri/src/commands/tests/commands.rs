@@ -22,6 +22,19 @@ fn make_store() -> (tempfile::TempDir, SkillStore) {
     (dir, store)
 }
 
+#[test]
+fn github_oauth_uses_saved_github_proxy_only_for_github() {
+    let (_dir, store) = make_store();
+    set_github_proxy_config_core(&store, true, 7897).unwrap();
+
+    assert_eq!(
+        oauth_proxy_url(&store, ProviderId::Github).unwrap(),
+        "http://127.0.0.1:7897"
+    );
+    assert_eq!(oauth_proxy_url(&store, ProviderId::Gitlab).unwrap(), "");
+    assert_eq!(oauth_proxy_url(&store, ProviderId::Gitee).unwrap(), "");
+}
+
 fn sqlite_sidecar_path(db_path: &Path, suffix: &str) -> PathBuf {
     let mut path = db_path.as_os_str().to_os_string();
     path.push(suffix);

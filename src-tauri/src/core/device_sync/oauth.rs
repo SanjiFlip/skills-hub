@@ -11,11 +11,12 @@ use super::credentials::{
     save_oauth_credential, save_oauth_credential_with_http_policy, CredentialStore,
     OAuthCredential, GITHUB_TOKEN_URL, GITLAB_TOKEN_URL,
 };
-use super::providers::provider;
+use super::providers::{github_oauth_provider, provider};
 use super::types::{
     OAuthPollResult, OAuthPollStatus, OAuthProviderAvailability, OAuthStartResult, ProviderAccount,
     ProviderId,
 };
+use crate::core::network_proxy::github_http_client_no_redirects;
 
 const GITHUB_DEVICE_URL: &str = "https://github.com/login/device/code";
 const GITLAB_DEVICE_URL: &str = "https://gitlab.com/oauth/authorize_device";
@@ -98,30 +99,54 @@ pub fn availability() -> Vec<OAuthProviderAvailability> {
     ]
 }
 
-pub fn start(provider_id: ProviderId) -> Result<OAuthStartResult> {
-    start_with_endpoints(provider_id, &OAuthEndpoints::default(), false)
+pub fn start(provider_id: ProviderId, proxy_url: &str) -> Result<OAuthStartResult> {
+    start_with_endpoints_and_proxy(provider_id, &OAuthEndpoints::default(), false, proxy_url)
 }
 
 pub(crate) fn trusted_refresh_endpoint(provider_id: ProviderId) -> Result<Option<String>> {
     OAuthEndpoints::default().trusted_refresh_endpoint(provider_id, false)
 }
 
-pub fn poll(flow_id: &str, credentials: &dyn CredentialStore) -> Result<OAuthPollResult> {
-    poll_flow(flow_id, credentials, false, |provider_id, token| {
-        provider(provider_id).validate_token(token)
-    })
+pub fn poll(
+    flow_id: &str,
+    credentials: &dyn CredentialStore,
+    proxy_url: &str,
+) -> Result<OAuthPollResult> {
+    poll_flow_with_proxy(
+        flow_id,
+        credentials,
+        false,
+        proxy_url,
+        |provider_id, token| {
+            if provider_id == ProviderId::Github {
+                github_oauth_provider(proxy_url)?.validate_token(token)
+            } else {
+                provider(provider_id).validate_token(token)
+            }
+        },
+    )
 }
 
 pub fn cancel(flow_id: &str) {
     flows().lock().unwrap().remove(flow_id);
 }
 
+#[cfg(test)]
 fn start_with_endpoints(
     provider_id: ProviderId,
     endpoints: &OAuthEndpoints,
     allow_http: bool,
 ) -> Result<OAuthStartResult> {
-    let client = oauth_http_client()?;
+    start_with_endpoints_and_proxy(provider_id, endpoints, allow_http, "")
+}
+
+fn start_with_endpoints_and_proxy(
+    provider_id: ProviderId,
+    endpoints: &OAuthEndpoints,
+    allow_http: bool,
+    proxy_url: &str,
+) -> Result<OAuthStartResult> {
+    let client = oauth_http_client(proxy_for_provider(provider_id, proxy_url))?;
     let (client_id, response, token_url, relay) = match provider_id {
         ProviderId::Github => {
             let client_id = endpoints
@@ -214,6 +239,7 @@ fn start_with_endpoints(
     })
 }
 
+#[cfg(test)]
 fn poll_flow<F>(
     flow_id: &str,
     credentials: &dyn CredentialStore,
@@ -223,7 +249,19 @@ fn poll_flow<F>(
 where
     F: FnOnce(ProviderId, &str) -> Result<ProviderAccount>,
 {
-    let client = oauth_http_client()?;
+    poll_flow_with_proxy(flow_id, credentials, allow_http, "", validate)
+}
+
+fn poll_flow_with_proxy<F>(
+    flow_id: &str,
+    credentials: &dyn CredentialStore,
+    allow_http: bool,
+    proxy_url: &str,
+    validate: F,
+) -> Result<OAuthPollResult>
+where
+    F: FnOnce(ProviderId, &str) -> Result<ProviderAccount>,
+{
     let now = now_seconds();
     let flow = flows()
         .lock()
@@ -231,6 +269,7 @@ where
         .get(flow_id)
         .cloned()
         .context("OAuth authorization session expired; start again")?;
+    let client = oauth_http_client(proxy_for_provider(flow.provider, proxy_url))?;
     if now >= flow.expires_at {
         remove_flow_if_current(flow_id, flow.claim_id);
         bail!("OAuth authorization session expired; start again");
@@ -342,12 +381,16 @@ fn remove_flow_if_current(flow_id: &str, claim_id: Uuid) {
     }
 }
 
-fn oauth_http_client() -> Result<Client> {
-    Client::builder()
-        .timeout(std::time::Duration::from_secs(20))
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
-        .context("build OAuth HTTP client")
+fn oauth_http_client(proxy_url: &str) -> Result<Client> {
+    github_http_client_no_redirects(proxy_url, Some(20)).context("build OAuth HTTP client")
+}
+
+fn proxy_for_provider(provider_id: ProviderId, github_proxy_url: &str) -> &str {
+    if provider_id == ProviderId::Github {
+        github_proxy_url
+    } else {
+        ""
+    }
 }
 
 fn pending(provider: ProviderId, interval_seconds: u64) -> OAuthPollResult {
@@ -627,6 +670,42 @@ mod tests {
         )
     }
 
+    fn responding_proxy_once(
+        body: &'static str,
+    ) -> (String, Receiver<String>, std::thread::JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let (request_tx, request_rx) = mpsc::channel();
+        let handle = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(5)))
+                .unwrap();
+            let mut request = Vec::new();
+            let mut buffer = [0_u8; 1024];
+            loop {
+                let read = stream.read(&mut buffer).unwrap();
+                assert!(read > 0);
+                request.extend_from_slice(&buffer[..read]);
+                if request.windows(4).any(|part| part == b"\r\n\r\n") {
+                    break;
+                }
+            }
+            request_tx
+                .send(String::from_utf8_lossy(&request).into_owned())
+                .unwrap();
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            )
+            .unwrap();
+            stream.flush().unwrap();
+        });
+        (format!("http://{address}"), request_rx, handle)
+    }
+
     fn insert_pollable_test_flow(token_url: String) -> String {
         let flow_id = Uuid::new_v4().to_string();
         flows().lock().unwrap().insert(
@@ -773,6 +852,30 @@ mod tests {
     }
 
     #[test]
+    fn github_device_authorization_uses_configured_proxy() {
+        let body = r#"{"device_code":"device","user_code":"ABCD","verification_uri":"http://127.0.0.1/verify","expires_in":900,"interval":3}"#;
+        let (proxy_url, request, proxy) = responding_proxy_once(body);
+        let configured = OAuthEndpoints {
+            github_client_id: Some("github-client".to_string()),
+            github_device_url: "http://127.0.0.1:9/github/device".to_string(),
+            github_token_url: "http://127.0.0.1:9/github/token".to_string(),
+            gitlab_client_id: None,
+            gitlab_device_url: String::new(),
+            gitlab_token_url: String::new(),
+            gitee_relay_url: None,
+        };
+
+        let flow =
+            start_with_endpoints_and_proxy(ProviderId::Github, &configured, true, &proxy_url)
+                .unwrap();
+
+        let received = request.recv_timeout(Duration::from_secs(5)).unwrap();
+        proxy.join().unwrap();
+        cancel(&flow.flow_id);
+        assert!(received.starts_with("POST http://127.0.0.1:9/github/device HTTP/1.1"));
+    }
+
+    #[test]
     fn pending_authorization_remains_pending() {
         let mut server = mockito::Server::new();
         server
@@ -799,6 +902,60 @@ mod tests {
         assert_eq!(result.status, OAuthPollStatus::Pending);
         assert!(flows().lock().unwrap().contains_key(&flow.flow_id));
         cancel(&flow.flow_id);
+    }
+
+    #[test]
+    fn gitlab_authorization_ignores_github_proxy() {
+        let mut server = mockito::Server::new();
+        server
+            .mock("POST", "/gitlab/device")
+            .with_status(200)
+            .with_body(format!(
+                r#"{{"device_code":"device","user_code":"EFGH","verification_uri":"{}/verify","expires_in":900,"interval":3}}"#,
+                server.url()
+            ))
+            .create();
+        let token_request = server
+            .mock("POST", "/gitlab/token")
+            .with_status(400)
+            .with_body(r#"{"error":"authorization_pending"}"#)
+            .create();
+        let flow = start_with_endpoints(ProviderId::Gitlab, &endpoints(&server), true).unwrap();
+
+        let result = poll_flow_with_proxy(
+            &flow.flow_id,
+            &MemoryCredentialStore::default(),
+            true,
+            "http://127.0.0.1:9",
+            |_, _| unreachable!(),
+        )
+        .unwrap();
+
+        assert_eq!(result.status, OAuthPollStatus::Pending);
+        token_request.assert();
+        cancel(&flow.flow_id);
+    }
+
+    #[test]
+    fn github_token_poll_uses_configured_proxy() {
+        let (proxy_url, request, proxy) =
+            responding_proxy_once(r#"{"access_token":"secret-oauth-token"}"#);
+        let flow_id =
+            insert_pollable_test_flow("http://127.0.0.1:9/login/oauth/access_token".to_string());
+        let credentials = MemoryCredentialStore::default();
+
+        let result = poll_flow_with_proxy(&flow_id, &credentials, true, &proxy_url, |_, _| {
+            Ok(ProviderAccount {
+                login: "may".to_string(),
+                display_name: None,
+            })
+        })
+        .unwrap();
+
+        let received = request.recv_timeout(Duration::from_secs(5)).unwrap();
+        proxy.join().unwrap();
+        assert_eq!(result.status, OAuthPollStatus::Authorized);
+        assert!(received.starts_with("POST http://127.0.0.1:9/login/oauth/access_token HTTP/1.1"));
     }
 
     #[test]

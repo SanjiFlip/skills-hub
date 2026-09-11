@@ -84,6 +84,14 @@ const DEVICE_SYNC_PENDING_OAUTH_SETTING: &str = "device_sync_pending_oauth_v1";
 const DEVICE_SYNC_CREDENTIAL_CLEANUP_QUEUE_SETTING: &str =
     "device_sync_credential_cleanup_queue_v1";
 
+fn oauth_proxy_url(store: &SkillStore, provider_id: ProviderId) -> anyhow::Result<String> {
+    if provider_id == ProviderId::Github {
+        get_github_proxy_url_core(store)
+    } else {
+        Ok(String::new())
+    }
+}
+
 fn format_anyhow_error(err: anyhow::Error) -> String {
     let first = err.to_string();
     // Frontend relies on these prefixes for special flows.
@@ -2430,11 +2438,18 @@ pub fn get_device_sync_pending_oauth(
 
 #[tauri::command]
 #[allow(non_snake_case)]
-pub async fn start_device_sync_oauth(providerId: ProviderId) -> Result<OAuthStartResult, String> {
-    tauri::async_runtime::spawn_blocking(move || oauth::start(providerId))
-        .await
-        .map_err(|err| err.to_string())?
-        .map_err(format_anyhow_error)
+pub async fn start_device_sync_oauth(
+    store: State<'_, SkillStore>,
+    providerId: ProviderId,
+) -> Result<OAuthStartResult, String> {
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let proxy_url = oauth_proxy_url(&store, providerId)?;
+        oauth::start(providerId, &proxy_url)
+    })
+    .await
+    .map_err(|err| err.to_string())?
+    .map_err(format_anyhow_error)
 }
 
 #[tauri::command]
@@ -2446,10 +2461,11 @@ pub async fn poll_device_sync_oauth(
     let store = store.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         let credentials = SystemCredentialStore;
+        let proxy_url = get_github_proxy_url_core(&store)?;
         poll_device_sync_oauth_with(
             &store,
             &credentials,
-            || oauth::poll(&flowId, &credentials),
+            || oauth::poll(&flowId, &credentials, &proxy_url),
             |pending| save_pending_oauth(&store, pending),
         )
     })

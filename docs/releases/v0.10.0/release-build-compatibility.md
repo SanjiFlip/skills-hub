@@ -6,7 +6,9 @@
 
 正式安装版仅使用编译期的 OAuth 配置，不读取用户机器上的 `.env`。开发版能授权不代表打包时配置已经注入。
 
-所有 `npm run tauri:build*` 命令现在先检查 `SKILLS_HUB_GITHUB_CLIENT_ID`。CI 保持从已有构建环境注入；本地未设置环境变量且未显式指定配置文件时，自动读取仓库根目录 `.env`：
+`npm run tauri:dev` 和所有 `npm run tauri:build*` 命令现在统一通过受检查的启动脚本，同时要求 `SKILLS_HUB_GITHUB_CLIENT_ID` 与 `SKILLS_HUB_GITLAB_CLIENT_ID`。这修复了 GitLab Client ID 已写入 `.env`，却因开发启动入口绕过注入、构建脚本只识别 GitHub 字段而仍显示“不支持浏览器授权”的问题。
+
+CI 可继续从构建环境注入；本地未设置对应环境变量且未显式指定配置文件时，自动读取仓库根目录 `.env`：
 
 ```bash
 cp .env.example .env
@@ -19,11 +21,11 @@ npm run tauri:build:mac:universal:dmg
 node scripts/build-desktop.mjs --check-oauth-only
 ```
 
-如需使用其他配置文件，仍可传入 `--oauth-env-file /absolute/path/to/.env`。脚本只提取精确命名的公开 Client ID，不执行文件内容、不展开变量、不导入 Client Secret 或用户 Token、不访问钥匙串；日志不打印配置值。已有显式环境变量优先。不要将 `.env` 复制进安装包。
+如需使用其他配置文件，仍可传入 `--oauth-env-file /absolute/path/to/.env`。脚本只提取精确命名的两个公开 Client ID，不执行文件内容、不展开变量、不导入 Client Secret、用户 Token 或其他字段、不访问钥匙串；日志不打印配置值。两个字段分别采用“已有显式环境变量优先，缺失项再从文件补充”的规则。不要将 `.env` 复制进安装包。
 
-直接运行 `tauri build` 或 `cargo build` 会绕过 npm 的前置检查；发布和分发包须使用上述受检查的入口。
+直接运行 `tauri dev`、`tauri build` 或 `cargo build` 会绕过 npm 的前置检查；开发、发布和分发包须使用上述受检查的 npm 入口。
 
-验证包括缺失与无效值拒绝、重复声明拒绝、环境变量优先、无秘密值日志、实际命令退出码，以及生成包两种架构均包含对应的编译期 Client ID。Client ID 存在不能证明 GitHub 服务、网络或用户授权已成功，仍需在目标设备走一次登录流程。
+验证包括任一字段缺失或无效时拒绝、重复声明拒绝、逐字段环境变量优先、无秘密值日志、开发与构建子命令及实际命令退出码。Client ID 存在不能证明 GitHub/GitLab 服务、网络或用户授权已成功，仍需在目标设备走一次登录流程。
 
 ## Windows/MSVC Rust 测试目标编译
 

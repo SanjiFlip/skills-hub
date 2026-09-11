@@ -159,7 +159,7 @@ Create the local OAuth configuration once before starting the desktop app or bui
 cp .env.example .env
 ```
 
-Replace the placeholder with the team's GitHub OAuth public Client ID. Debug runs and local `npm run tauri:build*` commands load the root `.env` automatically. Never add a client secret or user token, and do not commit `.env`.
+Replace both placeholders with the team's GitHub and GitLab OAuth public Client IDs. `npm run tauri:dev` and local `npm run tauri:build*` commands load only these two allowlisted values from the root `.env`; each value already present in the process environment takes precedence. Both IDs are required so browser authorization is available for both providers. Never add a client secret or user token, and do not commit `.env`.
 
 ```bash
 npm install

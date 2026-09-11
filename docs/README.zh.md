@@ -156,7 +156,7 @@ Explore 汇总精选仓库中的 Skill，并支持在线搜索。点击 Install 
 cp .env.example .env
 ```
 
-将占位值替换为团队提供的 GitHub OAuth 公开 Client ID。Debug 启动和本地 `npm run tauri:build*` 命令都会自动读取根目录 `.env`。不要填写 Client Secret 或用户 Token，也不要提交 `.env`。
+将两个占位值分别替换为团队提供的 GitHub、GitLab OAuth 公开 Client ID。`npm run tauri:dev` 和本地 `npm run tauri:build*` 命令只会从根目录 `.env` 读取这两个白名单字段；进程环境中已存在的对应值优先。两个 ID 都是必填项，以确保两个平台均可使用浏览器授权。不要填写 Client Secret 或用户 Token，也不要提交 `.env`。
 
 ### 启动（桌面端）
 
