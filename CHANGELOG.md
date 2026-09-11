@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file.
 ## [0.10.0]
 
 ### Changed
+- **Built-in tool catalog**: Increased the built-in adapter count to 48 and documented ZCode path rules in the English and Chinese support matrices.
 - **Unavailable browser authorization**: Clearly identify unsupported provider authorization in the current build, hide the unavailable sign-in action, and expand Token/SSH connection options.
 - **Shared device names**: Renaming this device publishes its name on the next sync. Other devices display that name after fetching; legacy remote aliases no longer override it, and only this device can be renamed.
 - **Sync scope explanation**: Clarify synced files, descriptions, tags, Git history, and device records; explain device-local data and when other devices receive changes.
@@ -34,6 +35,7 @@ All notable changes to this project will be documented in this file.
 - **Compact My Skills header**: Replaced overview cards with scope filters and counts, removed the duplicate scope dropdown, and show a compact sync-issue shortcut only when attention is needed.
 
 ### Added
+- **ZCode tool adapter**: Added global and project-level Skill sync through `~/.zcode/skills` and `.zcode/skills`. Skills Hub detects ZCode through `~/.zcode` and displays the Z.ai product icon throughout tool management and sync flows (fixes [#144](https://github.com/qufei1993/skills-hub/issues/144)).
 - **Standalone recycle bin**: Deleted Skills now appear in a dedicated local recycle bin for 30 days. Restore brings back files, descriptions, tags, enabled state, source information, and tool relationships; expired entries are cleaned at startup and once per day while the app is running.
 - **Korean interface language**: Added Korean translations across the app, a three-language selector, and persistent Korean language preferences. Korean users receive English release notes when viewing app updates.
 - **Multi-device Skill library sync**: Added Git-based device sync with GitHub, GitLab, and Gitee support. Browser authorization is the primary setup path, with Token/SSH retained as advanced options. Users can choose an existing private repository or create one from the app, check changes without modifying files, and run manual sync with optional startup sync.

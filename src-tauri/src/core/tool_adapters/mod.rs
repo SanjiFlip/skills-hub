@@ -17,6 +17,7 @@ pub enum ToolId {
     ClaudeCode,
     Codex,
     DeepSeekHarness,
+    ZCode,
     OpenCode,
     Antigravity,
     Amp,
@@ -69,6 +70,7 @@ impl ToolId {
             ToolId::ClaudeCode => "claude_code",
             ToolId::Codex => "codex",
             ToolId::DeepSeekHarness => "deepseek_harness",
+            ToolId::ZCode => "zcode",
             ToolId::OpenCode => "opencode",
             ToolId::Antigravity => "antigravity",
             ToolId::Amp => "amp",
@@ -492,6 +494,13 @@ pub fn default_tool_adapters() -> Vec<ToolAdapter> {
             relative_detect_dir: ".dsh",
         },
         ToolAdapter {
+            id: ToolId::ZCode,
+            display_name: "ZCode",
+            // ZCode stores user-level skills under ~/.zcode/skills/.
+            relative_skills_dir: ".zcode/skills",
+            relative_detect_dir: ".zcode",
+        },
+        ToolAdapter {
             id: ToolId::OpenCode,
             display_name: "OpenCode",
             // add-skill global path: ~/.config/opencode/skills/
@@ -852,6 +861,7 @@ pub fn project_relative_skills_dir(adapter: &ToolAdapter) -> &'static str {
         ToolId::WorkBuddy => ".workbuddy/skills",
         ToolId::Codex => ".agents/skills",
         ToolId::DeepSeekHarness => ".dsh/skills",
+        ToolId::ZCode => ".zcode/skills",
         ToolId::CommandCode => ".commandcode/skills",
         ToolId::Continue => ".continue/skills",
         ToolId::Crush => ".crush/skills",
