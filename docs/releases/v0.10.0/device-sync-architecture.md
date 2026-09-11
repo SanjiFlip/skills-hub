@@ -1,8 +1,10 @@
-# v0.10.0 多设备同步架构设计
+# v0.10.0 多设备同步架构与最终行为
 
 ## 1. 版本定位
 
 v0.10.0 为 Skills Hub 增加基于 Git 的跨设备 Skill 库同步。同步以 Skill 为业务单位，以 Git 仓库为版本与传输介质，首版支持 GitHub、GitLab 和 Gitee，默认引导 GitHub，用户可以随时选择其他平台或连接已有仓库。
+
+该功能源自 [Issue #56](https://github.com/qufei1993/skills-hub/issues/56) 提出的多设备同步需求：让多台 macOS 设备能够共享一致的 Skill 工作环境。v0.10.0 将原先设想的共享文件夹同步扩展为基于 Git 仓库的跨平台方案，以提供明确的版本历史、冲突处理和安全边界。
 
 本功能坚持本地优先：中央 Skill 仓库仍是当前设备的工作副本，远端 Git 仓库保存可移植 Skill 数据与历史。项目关联、AI 工具部署、绝对路径、SQLite、缓存和凭据始终留在本机。
 
@@ -23,10 +25,10 @@ v0.10.0 为 Skills Hub 增加基于 Git 的跨设备 Skill 库同步。同步以
 
 ### 3.1 目标
 
-- 多台设备共享同一套 Skill 内容、标签、来源和版本历史。
+- 多台设备共享同一套 Skill 内容、标签、可移植来源信息和版本历史；本地来源路径与绑定留在各设备。
 - 使用普通 Git 仓库保存数据，用户可以独立克隆和备份。
 - 对单边修改、不同 Skill 修改和安全的文件级修改自动合并。
-- 将真正冲突隔离到单个 Skill，其他 Skill 继续同步。
+- 将真正冲突隔离到单个 Skill 记录；存在未解决冲突时，本轮不发布或应用任何 Skill，避免推进不完整的全库基线。
 - 所有覆盖、删除和冲突选择之前创建可恢复版本。
 - 三个平台复用同一 Git 同步引擎，仅认证和建仓 API 不同。
 
@@ -72,15 +74,17 @@ v0.10.0 为 Skills Hub 增加基于 Git 的跨设备 Skill 库同步。同步以
 ### 5.1 进入 Git 仓库
 
 - Skill 目录全部有效内容：`SKILL.md`、`scripts/`、`references/`、`assets/` 等。
-- 稳定 Skill ID、名称、描述、标签、来源类型、来源引用、来源子路径和来源版本。
-- 内容哈希、版本关系、删除标记和回收站记录。
-- 设备同步身份、展示名和该设备已确认的内容 commit；不包含设备路径或配置。
+- 稳定 Skill ID、名称、描述和标签；Git 来源可保留可移植的来源信息。
+- 内容哈希和版本关系；删除通过当前清单中缺少对应 Skill 及 Git 历史传播。
+- 设备 ID、共享名称和最近一次发布同步时间；不包含设备路径、配置或确认基线。
 - 仓库格式版本，不包含应用数据库格式版本。
 
 ### 5.2 永不进入 Git 仓库
 
 - SQLite 文件和数据库内部 ID 映射。
 - `skill_targets` 及全局/项目部署关系。
+- 本地来源路径、来源子路径、来源版本和设备本地来源绑定。
+- 回收站记录、文件备份和设备最近成功同步基线。
 - 绝对路径、软链接、Junction、Copy 结果。
 - Token、OAuth 凭据、SSH 私钥、代理设置。
 - 缓存、日志、错误详情、发现扫描结果和临时文件。
@@ -96,6 +100,7 @@ skills-hub-sync/
 ├── .skills-hub/
 │   ├── format.json
 │   └── manifest.json
+├── devices.json
 ├── skills/
 │   └── <stable-skill-id>/
 │       ├── skill.json
@@ -104,7 +109,7 @@ skills-hub-sync/
 └── .gitignore
 ```
 
-`format.json` 包含仓库格式版本；`manifest.json` 是当前 Skill 索引；每个 `skill.json` 保存便于人工检查的可移植元数据。删除由 Git 历史表示，本机回收站索引保存在 SQLite，不复制 SQLite。
+`format.json` 包含仓库格式版本；`manifest.json` 是当前 Skill 索引；`devices.json` 保存设备名称和最近一次发布同步时间；每个 `skill.json` 保存便于人工检查的可移植元数据。删除由 Git 历史表示，本机回收站索引保存在 SQLite，不复制 SQLite。
 
 `skill.json` 仅包含可移植元数据：
 
@@ -128,18 +133,18 @@ skills-hub-sync/
 ## 7. 版本模型
 
 - 每次同步操作有一条本机运行记录，但不一定产生 Git commit。
-- 只有可移植 Skill 数据发生变化、自动合并成功或用户解决冲突时才创建 commit。
-- Git commit 是仓库级原子版本；commit message 和 trailer 记录设备 ID、变化 Skill ID 和操作类型。
+- 可移植 Skill 数据变化、自动合并成功或设备登记信息更新时可以创建 commit；纯设备元数据 commit 不计入内容同步历史。
+- Git commit 是仓库级原子版本；同步提交的 trailer 记录设备 ID 和设备名称，逐项变化保存在本机同步历史中。
 - Skill 的业务版本由其内容哈希与最近修改 commit 表示，不维护容易漂移的独立整数计数器。
-- 拉取已有版本、无变化检查和仅本机部署变化不会创建 commit。
+- 拉取已有版本、只读检查和仅本机部署变化不会创建 commit；执行同步时即使 Skill 无变化，也可能为刷新当前设备时间创建元数据 commit。
 
 ### 7.1 内容版本与设备确认状态
 
 - 仓库内容版本与设备确认状态分开表示。设备状态不能仅通过“最后一个 commit 由哪台设备创建”推断。
-- 每台设备记录自己已确认的内容版本。设备在无 Skill 变化时完成拉取，也必须能表示“已追上”。
-- 每台设备使用独立的命名跟踪 ref 指向已确认的主分支 commit；更新 ref 不创建 commit，不改变 Skill 内容版本。实现使用 GitHub、GitLab 和 Gitee 都可推送的命名分支 ref，不依赖平台私有 API。
-- 设备状态更新不得造成设备间无限交替产生新内容版本。
-- 页面的“已同步”、“待同步”和“最后活动”必须来自设备明确上报的确认版本，不能用 commit author 或 trailer 猜测。
+- 仓库根目录的 `devices.json` 按稳定设备 ID 保存共享名称和最近同步时间；同步保留其他设备记录，只更新当前设备。
+- `lastSyncedAt` 表示设备最近一次发布同步，不是在线心跳，也不用于推断版本是否落后。
+- 旧仓库可从 commit trailer 迁移设备记录；新提交继续写 trailer，以兼容旧客户端和同步基线恢复。
+- 设备列表读取本机缓存，不为状态展示打开 Git 或读取凭据。
 
 ## 8. Skill 身份识别
 
@@ -175,7 +180,7 @@ skills-hub-sync/
 文件级合并规则：
 
 - 不同文件修改：自动合并。
-- 同一文件被双方修改、二进制文件双方修改、删除与修改：保守地产生冲突。
+- 同一 UTF-8 文本文件被双方修改时，尝试三方合并不重叠的修改；重叠修改、二进制文件双方修改、删除与修改继续产生冲突。
 - 合并后的 Skill 必须仍包含有效 `SKILL.md`，否则转为冲突。
 
 冲突不会把标记写进中央 Skill 文件。同步工作区保留 base/local/remote 三份内容，SQLite 只记录冲突索引和状态。
@@ -189,15 +194,15 @@ flowchart LR
   E --> F[创建 Git commit]
   F --> G[推送远端]
   G --> H[应用到本机中央仓库]
-  D -- 否 --> I[保存冲突三方内容]
-  I --> J[仅该 Skill 待用户处理]
+  D -- 否 --> I[保存该 Skill 的冲突三方内容]
+  I --> J[暂停本轮发布与本机应用]
 ```
 
 ## 10. 并发控制
 
 - 同一设备使用进程内互斥锁防止两个同步任务并发。
-- 推送采用“拉取最新 HEAD → 合并 → 推送”的循环。
-- 非 fast-forward 推送重新 fetch 和比较，有限次数重试，不能使用强制推送。
+- 推送采用“拉取最新 HEAD → 合并 → 推送”的流程。
+- 非 fast-forward 推送会重新拉取、比较并完整重试一次；再次失败时停止，不能使用强制推送。
 - 仓库写入先在独立同步工作区完成；中央 Skill 仓库只接收验证通过的结果。
 - 应用远端 Skill 时使用临时目录加原子重命名，失败时保留原内容。
 
@@ -210,11 +215,11 @@ flowchart LR
 - 保留两份，本机版本生成新的稳定 ID 和名称，原 ID 采用远端版本。
 - 稍后处理。
 
-冲突未解决时，本 Skill 保持本机版本并暂停上传，其他 Skill 继续同步。用户选择“保留本机”后在下次同步生成共同版本；选择远端或保留两份时先更新本机库，再由下一次内容变化同步创建版本。
+冲突未解决时，本机中央库保持不变，本轮不发布或应用任何 Skill。用户解决单个冲突时只保存该 Skill 的处理结果，不推进全库成功基线；下一次完整同步会基于已解决状态重新比较其余内容。
 
 冲突冻结规则：
 
-- pending 冲突以 Skill ID 为单位冻结；手动同步、自动同步和非 fast-forward 重试都不得上传该 Skill。
+- pending 冲突以 Skill ID 保存，但会阻止手动同步、自动同步和非 fast-forward 重试发布本轮结果。
 - 同步基线推进不得消除冻结状态。只有用户明确选择解决方案后才能解冻。
 - 冲突必须保存可读取的 base/local/remote 快照或精确 Git 对象引用。解决时不读取可能已经变化的当前工作区。
 - 解决前必须校验远端 HEAD。如果远端又有变化，重新计算冲突，不将新内容套用到旧冲突记录。
@@ -302,12 +307,17 @@ Gitee 中转只承担 OAuth 协议适配，不保存 Skill 或仓库数据：
 
 ```text
 src-tauri/src/core/device_sync/
-├── mod.rs              对外服务与领域 DTO
+├── mod.rs              对外服务与同步编排
 ├── manifest.rs         仓库格式、导入与导出
 ├── merge.rs            文件级合并和冲突分类
+├── text_merge.rs       受限 UTF-8 文本三方合并
 ├── git_repo.rs         Git 工作区、commit、fetch、push
 ├── providers.rs        Provider trait 与注册表
 ├── credentials.rs      系统安全凭据抽象
+├── oauth.rs            浏览器授权流程
+├── scheduler.rs        启动、间隔与每日同步调度
+├── device_registry.rs  共享设备记录与旧仓库迁移
+├── errors.rs           安全诊断分类与脱敏
 └── types.rs            配置、状态、冲突、历史与回收站 DTO
 ```
 
@@ -315,12 +325,12 @@ src-tauri/src/core/device_sync/
 
 ## 16. 数据库迁移
 
-Schema 版本从 6 升级，新增以下本机表：
+共享 `PRAGMA user_version` 保持为 6。设备同步通过 `settings` 中的功能级 `schema.device_sync` 标记创建以下本机表，使上一稳定版本仍可安全忽略新增数据：
 
 - `device_sync_config`：Provider、remote URL、branch、自动检查/自动同步开关、credential key、最近成功 commit。
 - `device_sync_runs`：开始/结束时间、状态、变化数量和脱敏错误。
 - `device_sync_conflicts`：Skill、三方 commit、冲突文件和处理状态。
-- `device_sync_devices`：从 commit trailer 发现的设备 ID、名称和最后活动时间。
+- `device_sync_devices`：缓存从 `devices.json` 读取的设备 ID、名称和最后活动时间，并兼容从旧 commit trailer 迁移记录。
 - `device_sync_tombstones`：本机回收站索引和过期时间。
 
 这些表只保存可重建索引和本机状态，不复制到 Git。
@@ -330,27 +340,36 @@ Schema 版本从 6 升级，新增以下本机表：
 - `get_device_sync_status`
 - `get_device_sync_config`
 - `save_device_sync_config`
-- `validate_device_sync_connection`
+- `get_device_sync_oauth_availability`
+- `get_device_sync_pending_oauth`
+- `start_device_sync_oauth`
+- `poll_device_sync_oauth`
+- `cancel_device_sync_oauth`
+- `clear_device_sync_pending_oauth`
+- `validate_device_sync_account`
 - `create_device_sync_repository`
-- `check_device_sync_changes`
-- `run_device_sync_now`
-- `list_device_sync_history`
-- `list_device_sync_conflicts`
+- `list_device_sync_repositories`
+- `check_device_sync`
+- `run_device_sync`
+- `get_device_sync_history`
+- `get_device_sync_devices`
+- `set_device_sync_device_alias`
+- `get_device_sync_conflicts`
+- `get_device_sync_trash`
 - `resolve_device_sync_conflict`
-- `list_device_sync_trash`
-- `restore_device_sync_skill`
+- `restore_device_sync_trash`
 - `disconnect_device_sync`
 
-所有 Git、HTTP 和文件扫描操作使用 `spawn_blocking`。错误前缀包括 `SYNC_AUTH|`、`SYNC_CONFLICT|`、`SYNC_NON_FAST_FORWARD|`、`SYNC_INVALID_REPO|` 和 `SYNC_SECRET_FILE|`。
+所有 Git、HTTP 和文件扫描操作使用 `spawn_blocking`。跨历史与 IPC 边界的失败统一转换为 `DEVICE_SYNC_FAILURE_<kind>` 白名单诊断码；公开上传确认、仓库可见性未知和只读凭据要求使用固定控制码，不传递原始错误链或用户输入。
 
 ## 18. 前端结构
 
-- `ActiveView` 增加 `device-sync`，侧边栏 Workspace 区增加入口和待处理数量。
-- 新增 `DeviceSyncPage`，遵循现有标题栏、侧边栏、统计卡片、平面面板和响应式规则。
+- `ActiveView` 增加 `device-sync`，侧边栏管理中心区域增加入口和待处理数量。
+- `DeviceSyncPage` 使用紧凑状态行、平面面板和响应式布局展示最近结果、仓库关系与自动同步设置。
 - 页面状态：未配置、已同步、有本机变化、有远端变化、正在同步、离线、需要处理、认证失效。
 - 配置流程支持 Provider、登录方式、创建/选择仓库、手动/自动同步策略。
-- 冲突使用对话框或抽屉展示 base/local/remote 摘要，不在 toast 中承载必须操作的信息。
-- 所有文案进入 `src/i18n/resources.ts`，同时提供英文和中文。
+- 冲突在页面内按需展开，展示 base/local/remote 摘要和处理操作，不在 toast 中承载必须操作的信息。
+- 所有文案进入本地化资源，同时提供英文、简体中文和韩文。
 
 ## 19. 错误处理与恢复
 
@@ -374,7 +393,7 @@ Schema 版本从 6 升级，新增以下本机表：
 - local/base/remote 全组合规划。
 - 不同 Skill、不同文件、同文件不同位置和同一位置冲突。
 - 删除、修改与删除冲突、回收站恢复和过期清理。
-- 无变化不创建版本。
+- 只读检查和仅本机部署变化不创建 commit；无 Skill 变化的同步允许创建纯设备元数据 commit，且不计入内容同步历史。
 - Provider URL 规范化、Token 验证和建仓 API mock。
 - 日志与错误脱敏。
 
@@ -383,7 +402,7 @@ Schema 版本从 6 升级，新增以下本机表：
 - 使用临时 bare Git 仓库模拟两台设备。
 - 初次上传、空设备拉取、非空设备合并。
 - 单边修改、双边安全合并、非 fast-forward 重试。
-- 同一 Skill 冲突隔离和保留两份。
+- 同一 Skill 冲突记录隔离、整轮发布阻断和保留两份。
 - 删除传播、删除与修改冲突、恢复。
 - 大文件、二进制文件、大小写路径、Unicode 名称、断网和损坏仓库。
 - 凭据不进入数据库、日志、remote URL 和 Git 历史。
@@ -394,7 +413,7 @@ Schema 版本从 6 升级，新增以下本机表：
 - 未配置、检查中、可同步、同步中、冲突和认证失效状态。
 - 自动同步默认关闭。
 - 冲突操作、稍后处理、回收站恢复和错误恢复。
-- 中英文文案与窄窗口布局。
+- 英文、简体中文、韩文文案与窄窗口布局。
 
 ## 21. 分阶段实施
 
@@ -410,12 +429,12 @@ Schema 版本从 6 升级，新增以下本机表：
 - GitHub、GitLab、Gitee 可选择并连接已有仓库，也可创建私有仓库。
 - GitHub 是默认 Provider，切换后配置可持久化。
 - 初次同步、新设备空库和非空库均不静默覆盖。
-- 只同步 Skill 与可移植元数据；仅上报设备 ID、展示名和已确认内容版本，不同步部署、本机路径或设备配置。
-- 无变化同步不创建 commit。
-- 安全变更自动合并，真正冲突只阻塞对应 Skill。
+- 只同步 Skill 与可移植元数据；设备登记仅上报设备 ID、共享名称和最近发布同步时间，不同步确认基线、部署、本机路径、回收站或设备配置。
+- 无 Skill 变化的同步只允许创建设备元数据 commit，不增加内容同步历史。
+- 安全变更自动合并；真正冲突记录在对应 Skill，但未解决前阻止整轮发布和本机应用。
 - 删除进入回收站并可以恢复。
 - Token 不进入 SQLite、日志、Git config 或 Git 历史。
-- UI 使用当前 Skills Hub 设计体系，并具备中英文文案。
+- UI 使用当前 Skills Hub 设计体系，并具备英文、简体中文和韩文文案。
 - `npm run version:check` 与 `npm run check` 全部通过。
 
 ### 同步范围展示
