@@ -593,7 +593,10 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(credential.credtype(), git2::CredentialType::SSH_KEY.bits());
+        assert_eq!(
+            i64::from(credential.credtype()),
+            i64::from(git2::CredentialType::SSH_KEY.bits())
+        );
     }
 
     #[test]
