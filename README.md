@@ -18,6 +18,8 @@ Skills Hub installs skills into one central repository, then syncs them to tools
 - **Centralized library**: Install skills into one central repository instead of scattering copies across tool folders.
 - **Explore and install**: Install from curated lists, online search, local folders, or Git repositories.
 - **Multi-tool sync**: Sync skills to different AI coding tools by global or project scope.
+- **Multi-device library sync**: Keep Skill content, descriptions, and tags aligned across computers through a GitHub, GitLab, or Gitee repository.
+- **Local recycle bin**: Recover deleted Skills and their saved local configuration for up to 30 days.
 - **Bulk management**: Apply tags, tool targets, enabled state, or delete operations to many skills at once.
 - **Tag organization**: Filter, group, and maintain skills with tags.
 - **Tool management**: Enable built-in tool targets or add custom skills directories.
@@ -25,6 +27,7 @@ Skills Hub installs skills into one central repository, then syncs them to tools
 - **Detail view**: Browse skill file trees, Markdown content, and code snippets.
 - **Migration**: Scan and import existing local skills into one managed library.
 - **Discovery controls**: Choose which installed tool directories participate in import discovery.
+- **Multilingual interface**: Use Skills Hub in English, Simplified Chinese, or Korean.
 
 ## Interface Preview
 
@@ -50,6 +53,14 @@ Manual add supports both local folders and Git repositories. Before installing, 
 
 ![Add a skill from a Git repository](docs/assets/add-skill-git-repository.png)
 
+### Device Sync — Keep Your Skill Library Aligned
+
+Device Sync connects Skills Hub to a GitHub, GitLab, or Gitee repository. You can preview changes, synchronize manually, after startup, at an interval, or at a daily time, inspect per-Skill history, and resolve real conflicts without exposing device-local paths, tool targets, or credentials.
+
+### Recycle Bin — Recover Deleted Skills
+
+Deleted Skills remain in a local recycle bin for 30 days. Restoring a Skill brings back its files and saved local configuration when the original locations are still available.
+
 ### Tools — Built-in and Custom Tool Management
 
 Tools shows detected and enabled AI coding tools with recognizable product icons. You can enable built-in targets or create and edit custom tools with an avatar, skills directories, and an explicit sync mode.
@@ -74,11 +85,12 @@ Settings keeps app-level preferences such as interface language, appearance, sto
 2. Choose tags, sync scope, and target tools before installation.
 3. Skills Hub stores the skill in the central repository, which defaults to `~/.skillshub`.
 4. Skills Hub syncs it to global skills directories or project-level skills directories based on each tool's rules.
-5. Later, you can organize, enable/disable, delete, or bulk update skills from My Skills, and configure tool targets or automatic updates from Management Center.
+5. Optionally connect Device Sync to keep the portable Skill library aligned across computers.
+6. Later, you can organize, enable/disable, delete, recover, or bulk update skills from My Skills and Management Center.
 
 ## Supported AI Coding Tools
 
-Skills Hub includes 47 built-in tool adapters and supports custom skills directories from Management Center. Project skills directories are relative to the selected project root. Tools marked `N/A` do not have a confirmed project-level skills directory and are supported for global sync only.
+Skills Hub includes 48 built-in tool adapters and supports custom skills directories from Management Center. Project skills directories are relative to the selected project root. Tools marked `N/A` do not have a confirmed project-level skills directory and are supported for global sync only.
 
 | tool key | Display name | global skills dir (relative to `~`) | project skills dir (relative to project) | detected if exists (relative to `~`) |
 | --- | --- | --- | --- | --- |
@@ -86,6 +98,7 @@ Skills Hub includes 47 built-in tool adapters and supports custom skills directo
 | `claude_code` | Claude Code | `.claude/skills` | `.claude/skills` | `.claude` |
 | `codex` | Codex | `.codex/skills` | `.agents/skills` | `.codex` |
 | `deepseek_harness` | DeepSeek Harness | `.dsh/skills` | `.dsh/skills` | `.dsh` |
+| `zcode` | ZCode | `.zcode/skills` | `.zcode/skills` | `.zcode` |
 | `opencode` | OpenCode | `.config/opencode/skills` | `.agents/skills` | `.config/opencode` |
 | `antigravity` | Antigravity | `.gemini/config/skills` | `.agents/skills` | `.gemini/config` |
 | `amp` | Amp | `.config/agents/skills` | `.agents/skills` | `.config/agents` |

@@ -24,6 +24,7 @@ import qwenLogo from '@lobehub/icons-static-svg/icons/qwen-color.svg'
 import rooCodeLogo from '@lobehub/icons-static-svg/icons/roocode.svg'
 import traeLogo from '@lobehub/icons-static-svg/icons/trae-color.svg'
 import windsurfLogo from '@lobehub/icons-static-svg/icons/windsurf.svg'
+import zaiLogo from '@lobehub/icons-static-svg/icons/zai.svg'
 import zencoderLogo from '@lobehub/icons-static-svg/icons/zencoder-color.svg'
 import kimiCodeLogo from '../../assets/kimi-code-icon.png'
 
@@ -65,6 +66,7 @@ const logoByToolKey: Record<string, string> = {
   trae: traeLogo,
   trae_cn: traeLogo,
   windsurf: windsurfLogo,
+  zcode: zaiLogo,
   zencoder: zencoderLogo,
 }
 

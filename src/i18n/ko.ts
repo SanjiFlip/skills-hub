@@ -1026,6 +1026,7 @@ export const ko = {
       "claude_code": "Claude Code",
       "codex": "Codex",
       "deepseek_harness": "DeepSeek Harness",
+      "zcode": "ZCode",
       "cursor": "Cursor",
       "amp": "Amp",
       "kimi_cli": "Kimi Code CLI",

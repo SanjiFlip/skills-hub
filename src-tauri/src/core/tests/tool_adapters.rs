@@ -259,8 +259,8 @@ fn adapter_by_key_finds_known_tool() {
 }
 
 #[test]
-fn builtin_tool_count_matches_v090_documentation() {
-    assert_eq!(default_tool_adapters().len(), 47);
+fn builtin_tool_count_matches_documentation() {
+    assert_eq!(default_tool_adapters().len(), 48);
 }
 
 #[test]
@@ -273,6 +273,17 @@ fn adapter_by_key_finds_new_tools() {
     assert!(adapter_by_key("deepseek_harness").is_some());
     assert!(adapter_by_key("hermes_agent").is_some());
     assert!(adapter_by_key("workbuddy").is_some());
+}
+
+#[test]
+fn zcode_adapter_uses_official_skill_dirs() {
+    let zcode = adapter_by_key("zcode").expect("ZCode adapter should be registered");
+
+    assert_eq!(zcode.id, ToolId::ZCode);
+    assert_eq!(zcode.relative_skills_dir, ".zcode/skills");
+    assert_eq!(zcode.relative_detect_dir, ".zcode");
+    assert_eq!(project_relative_skills_dir(&zcode), ".zcode/skills");
+    assert!(supports_project_scope(&zcode));
 }
 
 #[test]
