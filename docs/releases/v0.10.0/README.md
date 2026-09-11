@@ -29,6 +29,7 @@ v0.10.0 的重点是在多台设备间安全同步已托管的 Skill 库。本�
 | 存储与替换安全 | [#123](https://github.com/qufei1993/skills-hub/issues/123) | [#125](https://github.com/qufei1993/skills-hub/pull/125) | [#127](https://github.com/qufei1993/skills-hub/pull/127)、[#128](https://github.com/qufei1993/skills-hub/pull/128) |
 | 来源缺失时的 Skill 详情 | — | [#138](https://github.com/qufei1993/skills-hub/pull/138) | — |
 | Kimi Code CLI 路径与图标 | [#122](https://github.com/qufei1993/skills-hub/issues/122) | [#126](https://github.com/qufei1993/skills-hub/pull/126) | — |
+| Windows/MSVC Rust 构建 | [#142](https://github.com/qufei1993/skills-hub/issues/142) | [#143](https://github.com/qufei1993/skills-hub/pull/143) | — |
 
 [PR #130](https://github.com/qufei1993/skills-hub/pull/130) 仅包含测试环境清理，因此不列入面向用户的更新日志。
 
@@ -51,7 +52,7 @@ v0.10.0 的重点是在多台设备间安全同步已托管的 Skill 库。本�
 
 ### 发布构建
 
-- [OAuth 打包前检查](oauth-build-preflight.md)：正式安装包的 OAuth Client ID 注入与安全检查。
+- [发布构建与平台兼容性](release-build-compatibility.md)：正式安装包的 OAuth Client ID 检查，以及 Windows/MSVC Rust 测试目标编译修复。
 
 ## 更新日志
 

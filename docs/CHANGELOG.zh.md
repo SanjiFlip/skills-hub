@@ -18,6 +18,7 @@
 - **精简管理工作区**：My Skills 使用紧凑的范围筛选和准确数量，批量操作只处理当前可见选择；Skill 异常按需展开，管理中心将设备同步置于首位、回收站置于末位（[PR #133](https://github.com/qufei1993/skills-hub/pull/133)、[PR #136](https://github.com/qufei1993/skills-hub/pull/136)、[PR #140](https://github.com/qufei1993/skills-hub/pull/140)）。
 
 ### 修复
+- **Windows Rust 构建兼容性**：修复仅在 MSVC 下出现的类型与 lint 错误，使 `cargo clippy --all-targets` 和 Rust 测试目标能够在 Windows 上完成编译。既有的 `STATUS_ENTRYPOINT_NOT_FOUND` 测试程序启动问题不在本次修复范围内（修复 [#142](https://github.com/qufei1993/skills-hub/issues/142)，[PR #143](https://github.com/qufei1993/skills-hub/pull/143)）。
 - **来源及工具异常状态一致**：来源更新错误不再被无关设备同步清除，各页面会刷新当前状态；工具副本异常不再导致中央库同步失败，本地原始来源缺失时仍可查看托管副本（[PR #136](https://github.com/qufei1993/skills-hub/pull/136)、[PR #138](https://github.com/qufei1993/skills-hub/pull/138)）。
 - **筛选安装范围准确**：未填写来源时禁用添加操作；从多 Skill Git 仓库或本地目录导入时，只安装当前搜索结果中可见且已勾选的项目（[PR #124](https://github.com/qufei1993/skills-hub/pull/124)、[PR #132](https://github.com/qufei1993/skills-hub/pull/132)）。
 - **嵌套 Git Skill 发现**：从仓库根地址或标准 `skills/` 目录链接添加时，可在受限且安全的扫描范围内识别 `skills/<分类>/<技能>/SKILL.md` 结构（修复 [#129](https://github.com/qufei1993/skills-hub/issues/129)，[PR #131](https://github.com/qufei1993/skills-hub/pull/131)）。
