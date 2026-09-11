@@ -5,6 +5,7 @@ use serde::Deserialize;
 use serde_json::json;
 
 use super::types::{ProviderAccount, ProviderId, RemoteRepository};
+use crate::core::network_proxy::{app_http_client, github_http_client_no_redirects};
 
 pub trait GitProvider: Send + Sync {
     fn validate_token(&self, token: &str) -> Result<ProviderAccount>;
@@ -18,6 +19,14 @@ pub fn provider(id: ProviderId) -> Box<dyn GitProvider> {
         ProviderId::Gitlab => Box::new(ApiProvider::gitlab()),
         ProviderId::Gitee => Box::new(ApiProvider::gitee()),
     }
+}
+
+pub fn github_oauth_provider(proxy_url: &str) -> Result<Box<dyn GitProvider>> {
+    Ok(Box::new(ApiProvider::new_with_proxy(
+        ProviderId::Github,
+        "https://api.github.com",
+        proxy_url,
+    )?))
 }
 
 #[derive(Clone, Debug)]
@@ -45,15 +54,29 @@ impl ApiProvider {
         Self::new(id, &base_url.into())
     }
 
+    #[cfg(test)]
+    pub fn with_base_url_and_proxy(
+        id: ProviderId,
+        base_url: impl Into<String>,
+        proxy_url: &str,
+    ) -> Result<Self> {
+        Self::new_with_proxy(id, &base_url.into(), proxy_url)
+    }
+
     fn new(id: ProviderId, base_url: &str) -> Self {
         Self {
             id,
             base_url: base_url.trim_end_matches('/').to_string(),
-            client: Client::builder()
-                .timeout(std::time::Duration::from_secs(20))
-                .build()
-                .expect("build provider HTTP client"),
+            client: app_http_client("", Some(20)).expect("build provider HTTP client"),
         }
+    }
+
+    fn new_with_proxy(id: ProviderId, base_url: &str, proxy_url: &str) -> Result<Self> {
+        Ok(Self {
+            id,
+            base_url: base_url.trim_end_matches('/').to_string(),
+            client: github_http_client_no_redirects(proxy_url, Some(20))?,
+        })
     }
 
     fn headers(&self, token: &str) -> Result<HeaderMap> {
@@ -251,6 +274,37 @@ fn sanitize_message(value: &str) -> String {
 mod tests {
     use super::*;
     use mockito::Matcher;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    fn account_proxy_once() -> (String, mpsc::Receiver<String>, std::thread::JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let (request_tx, request_rx) = mpsc::channel();
+        let handle = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(5)))
+                .unwrap();
+            let mut buffer = [0_u8; 4096];
+            let read = stream.read(&mut buffer).unwrap();
+            request_tx
+                .send(String::from_utf8_lossy(&buffer[..read]).into_owned())
+                .unwrap();
+            let body = r#"{"login":"may","name":"May"}"#;
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            )
+            .unwrap();
+            stream.flush().unwrap();
+        });
+        (format!("http://{address}"), request_rx, handle)
+    }
 
     #[test]
     fn github_validates_account_and_creates_private_repository() {
@@ -278,6 +332,77 @@ mod tests {
         );
         account.assert();
         repository.assert();
+    }
+
+    #[test]
+    fn github_account_validation_uses_configured_proxy() {
+        let (proxy_url, request, proxy) = account_proxy_once();
+        let provider = ApiProvider::with_base_url_and_proxy(
+            ProviderId::Github,
+            "http://127.0.0.1:9",
+            &proxy_url,
+        )
+        .unwrap();
+
+        let account = provider.validate_token("token").unwrap();
+
+        let received = request.recv_timeout(Duration::from_secs(5)).unwrap();
+        proxy.join().unwrap();
+        assert_eq!(account.login, "may");
+        assert!(received.starts_with("GET http://127.0.0.1:9/user HTTP/1.1"));
+    }
+
+    #[test]
+    fn oauth_account_validation_does_not_follow_redirects() {
+        for status in [307, 308] {
+            let mut trusted_server = mockito::Server::new();
+            let mut attacker_server = mockito::Server::new();
+            let redirect_target = format!("{}/user", attacker_server.url());
+            let trusted_request = trusted_server
+                .mock("GET", "/user")
+                .with_status(status)
+                .with_header("location", &redirect_target)
+                .create();
+            let attacker_request = attacker_server
+                .mock("GET", "/user")
+                .expect(0)
+                .with_status(200)
+                .with_body(r#"{"login":"attacker"}"#)
+                .create();
+            let provider =
+                ApiProvider::with_base_url_and_proxy(ProviderId::Github, trusted_server.url(), "")
+                    .unwrap();
+
+            let result = provider.validate_token("token");
+
+            assert!(result.is_err(), "accepted HTTP {status} redirect");
+            trusted_request.assert();
+            attacker_request.assert();
+        }
+    }
+
+    #[test]
+    fn standard_provider_account_validation_preserves_redirect_behavior() {
+        let mut trusted_server = mockito::Server::new();
+        let mut destination_server = mockito::Server::new();
+        let redirect_target = format!("{}/user", destination_server.url());
+        let trusted_request = trusted_server
+            .mock("GET", "/user")
+            .with_status(307)
+            .with_header("location", &redirect_target)
+            .create();
+        let destination_request = destination_server
+            .mock("GET", "/user")
+            .with_status(200)
+            .with_body(r#"{"username":"gitlab-user"}"#)
+            .create();
+        let provider = ApiProvider::with_base_url(ProviderId::Gitlab, trusted_server.url());
+
+        let account = provider.validate_token("token").unwrap();
+
+        assert_eq!(account.login, "gitlab-user");
+        trusted_request.assert();
+        destination_request.assert();
     }
 
     #[test]

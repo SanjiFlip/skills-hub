@@ -17,9 +17,10 @@
 - **更安全、清晰的设备同步**：三方比较会自动合并独立修改，并将真实冲突限制在对应 Skill。每台设备的来源绑定留在本机，同名 Skill 分别存放；同步失败和逐项变化可查看，设备名称可共享，历史仅保留最近 100 条有效记录（[PR #134](https://github.com/qufei1993/skills-hub/pull/134)、[PR #137](https://github.com/qufei1993/skills-hub/pull/137)、[PR #139](https://github.com/qufei1993/skills-hub/pull/139)、[PR #140](https://github.com/qufei1993/skills-hub/pull/140)）。
 - **更安全的 Skill 生命周期操作**：存储迁移、自动替换、删除、自定义工具移除和缓存清理会保护本地原始来源、重叠路径、被独立修改的副本及回滚数据；该能力延续了 [#123](https://github.com/qufei1993/skills-hub/issues/123) 的修复（[PR #125](https://github.com/qufei1993/skills-hub/pull/125)、[PR #128](https://github.com/qufei1993/skills-hub/pull/128)）。
 - **精简管理工作区**：My Skills 使用紧凑的范围筛选和准确数量，批量操作只处理当前可见选择；Skill 异常按需展开，管理中心将设备同步置于首位、回收站置于末位（[PR #133](https://github.com/qufei1993/skills-hub/pull/133)、[PR #136](https://github.com/qufei1993/skills-hub/pull/136)、[PR #140](https://github.com/qufei1993/skills-hub/pull/140)）。
-- **本地桌面 OAuth 配置**：Debug 启动和本地 `npm run tauri:build*` 命令在构建环境和显式配置文件均未提供配置时，会自动从仓库根目录 `.env` 中仅提取 `SKILLS_HUB_GITHUB_CLIENT_ID`。公开 Client ID 缺失或格式不合法时仍会在编译前停止，且不会导入 Client Secret 或用户 Token。
+- **本地桌面 OAuth 配置**：`npm run tauri:dev` 和本地 `npm run tauri:build*` 命令现在会同时校验并注入 `SKILLS_HUB_GITHUB_CLIENT_ID` 与 `SKILLS_HUB_GITLAB_CLIENT_ID`；每个字段优先使用进程环境中的值，否则仅从仓库根目录 `.env` 或显式配置文件读取这两个白名单字段。已配置的 GitLab 浏览器授权因此可在开发版和安装版中使用。任一公开 Client ID 缺失或格式不合法时会在编译前停止，且不会导入 Client Secret、用户 Token 或其他字段。
 
 ### 修复
+- **GitHub OAuth 复用代理**：GitHub 设备授权的设备码申请、Token 轮询和授权账号校验现在统一使用应用中配置的代理；GitLab 与 Gitee OAuth 不受 GitHub 代理设置影响。
 - **Windows Rust 构建兼容性**：修复仅在 MSVC 下出现的类型与 lint 错误，使 `cargo clippy --all-targets` 和 Rust 测试目标能够在 Windows 上完成编译。既有的 `STATUS_ENTRYPOINT_NOT_FOUND` 测试程序启动问题不在本次修复范围内（修复 [#142](https://github.com/qufei1993/skills-hub/issues/142)，[PR #143](https://github.com/qufei1993/skills-hub/pull/143)）。
 - **来源及工具异常状态一致**：来源更新错误不再被无关设备同步清除，各页面会刷新当前状态；工具副本异常不再导致中央库同步失败，本地原始来源缺失时仍可查看托管副本（[PR #136](https://github.com/qufei1993/skills-hub/pull/136)、[PR #138](https://github.com/qufei1993/skills-hub/pull/138)）。
 - **筛选安装范围准确**：未填写来源时禁用添加操作；从多 Skill Git 仓库或本地目录导入时，只安装当前搜索结果中可见且已勾选的项目（[PR #124](https://github.com/qufei1993/skills-hub/pull/124)、[PR #132](https://github.com/qufei1993/skills-hub/pull/132)）。
