@@ -270,6 +270,7 @@ pub fn run() {
             commands::get_recycle_bin_locations,
             commands::restore_recycle_bin_item,
             commands::delete_recycle_bin_item,
+            commands::clear_recycle_bin,
             commands::resolve_device_sync_conflict,
             commands::restore_device_sync_trash,
             commands::disconnect_device_sync,

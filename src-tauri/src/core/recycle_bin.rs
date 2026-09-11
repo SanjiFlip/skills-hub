@@ -294,6 +294,25 @@ impl<'a> RecycleBinService<'a> {
         self.delete_permanently_inner(id)
     }
 
+    pub fn clear(&self, confirmed_ids: &[String]) -> Result<usize> {
+        let _guard = lock_recycle_bin()?;
+        let ids = self
+            .store
+            .list_recycle_bin_rows()?
+            .into_iter()
+            .map(|(entry, _, _)| entry.id)
+            .collect::<Vec<_>>();
+        let mut current_ids = ids.clone();
+        let mut expected_ids = confirmed_ids.to_vec();
+        current_ids.sort_unstable();
+        expected_ids.sort_unstable();
+        anyhow::ensure!(current_ids == expected_ids, "RECYCLE_BIN_CHANGED");
+        for id in &ids {
+            self.delete_permanently_inner(id)?;
+        }
+        Ok(ids.len())
+    }
+
     fn delete_permanently_inner(&self, id: &str) -> Result<()> {
         let (entry, _, _) = self
             .store

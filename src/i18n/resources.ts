@@ -123,6 +123,7 @@ export const resources = {
         "helpLocal": "Recovery data stays on this computer. Permanent deletion and expiry cleanup remove the backup files and recovery records; they cannot be restored here afterward.",
         toolsCount: '{{count}} synced tools',
         errors: {
+          "changed": "The recycle bin changed. Check the updated list and confirm again.",
           "locationOccupied": "The original Skill location is occupied. Check the existing files or Skill before trying again; nothing was overwritten.",
           "skillExists": "This Skill already exists. Check My Skills before trying to restore it.",
           "itemMissing": "This recycle bin entry is no longer available. Reopen the recycle bin to refresh the list.",
@@ -131,7 +132,8 @@ export const resources = {
           "snapshotInvalid": "The recovery information could not be read. Keep the backup files and try again.",
           "loadFailed": "Could not load the recycle bin. Reopen the page to try again.",
           "restoreFailed": "Could not complete restoration. Check My Skills and the recycle bin before retrying.",
-          "deleteFailed": "Could not complete permanent deletion. Reopen the recycle bin to check the result and try again."
+          "deleteFailed": "Could not complete permanent deletion. Reopen the recycle bin to check the result and try again.",
+          "clearFailed": "Could not empty the recycle bin. Check the remaining items and try again."
 },
         locations: {"manual_backup": "Manually deleted files", "sync_backup": "Files deleted by device sync", "hint": "These paths are read from this device. Each entry has its own backup subfolder. Select and copy a path to locate it; folders are created when needed.", "loading": "Loading storage locations…", "unavailable": "Storage locations are unavailable. Reopen help in the desktop app to try again."},
         nav: 'Recycle bin', title: 'Recycle bin',
@@ -147,6 +149,9 @@ export const resources = {
         filesAndDescription: 'Skill files and description', tagsCount: '{{count}} tags', targetsCount: '{{count}} tool sync relationships', previousTargets: 'Previous tool sync',
         restore: 'Restore', restored: 'Restored {{name}}.', deletePermanently: 'Delete permanently', deletedPermanently: 'Permanently deleted {{name}}.',
         confirmTitle: 'Delete this Skill permanently?', confirmHelp: '{{name}} and its saved recovery data cannot be restored after deletion.', confirmDelete: 'Delete permanently',
+        clearAll: 'Empty recycle bin', cleared_one: 'Permanently deleted {{count}} item from the recycle bin.', cleared_other: 'Permanently deleted {{count}} items from the recycle bin.',
+        clearConfirmTitle: 'Empty the recycle bin?', clearConfirmHelp_one: 'This permanently deletes {{count}} Skill, its backup files, and recovery information. This cannot be undone.', clearConfirmHelp_other: 'This permanently deletes all {{count}} Skills, their backup files, and recovery information. This cannot be undone.',
+        clearConfirmInstruction: 'Type “{{phrase}}” to confirm.', clearConfirmLabel: 'Confirmation text', clearConfirmPhrase: 'empty recycle bin', confirmClear: 'Permanently empty',
         source: { manual: 'Deleted locally', sync: 'Deleted by device sync' },
       },
       deviceSync: {
@@ -1223,6 +1228,7 @@ export const resources = {
         "helpLocal": "恢复备份不会同步到其他设备。永久删除或过期清理会移除备份文件和恢复记录，之后无法通过回收站找回。",
         toolsCount: '{{count}} 个已同步工具',
         errors: {
+          "changed": "回收站内容已发生变化，请检查最新列表后重新确认。",
           "locationOccupied": "原恢复位置已被占用。请先检查该位置的文件或已安装的 Skill，再尝试恢复；现有文件未被覆盖。",
           "skillExists": "这个 Skill 已经存在，请先到“我的 Skills”中查看。",
           "itemMissing": "这条回收站记录已不存在，请重新进入回收站刷新列表。",
@@ -1231,7 +1237,8 @@ export const resources = {
           "snapshotInvalid": "无法读取恢复信息，请保留备份文件后重试。",
           "loadFailed": "无法加载回收站，请重新进入页面重试。",
           "restoreFailed": "未能完成恢复，请先检查“我的 Skills”和回收站中的结果，再尝试操作。",
-          "deleteFailed": "未能完成永久删除，请重新进入回收站检查结果后重试。"
+          "deleteFailed": "未能完成永久删除，请重新进入回收站检查结果后重试。",
+          "clearFailed": "未能清空回收站，请检查剩余项目后重试。"
 },
         locations: {"manual_backup": "手动删除的文件备份", "sync_backup": "设备同步删除的文件备份", "hint": "以上路径由当前设备自动读取。每条记录对应一个独立备份子目录，可选中复制路径查找；文件夹会在需要时创建。", "loading": "正在读取保存位置…", "unavailable": "暂时无法获取保存位置，请在桌面应用中重新打开说明重试。"},
         nav: '回收站', title: '回收站', subtitle: '恢复删除的 Skill 及其本机配置。',
@@ -1245,6 +1252,9 @@ export const resources = {
         filesAndDescription: 'Skill 文件和描述', tagsCount: '{{count}} 个标签', targetsCount: '{{count}} 个工具同步关系', previousTargets: '删除前同步工具',
         restore: '恢复', restored: '已恢复 {{name}}。', deletePermanently: '永久删除', deletedPermanently: '已永久删除 {{name}}。',
         confirmTitle: '永久删除这个 Skill？', confirmHelp: '永久删除 {{name}} 后，文件和恢复信息都无法找回。', confirmDelete: '永久删除',
+        clearAll: '清空回收站', cleared_one: '已从回收站永久删除 {{count}} 项。', cleared_other: '已从回收站永久删除 {{count}} 项。',
+        clearConfirmTitle: '清空回收站？', clearConfirmHelp_one: '这会永久删除 {{count}} 个 Skill、备份文件和恢复信息，且无法撤销。', clearConfirmHelp_other: '这会永久删除全部 {{count}} 个 Skill、备份文件和恢复信息，且无法撤销。',
+        clearConfirmInstruction: '请输入“{{phrase}}”以确认。', clearConfirmLabel: '确认文字', clearConfirmPhrase: '清空回收站', confirmClear: '永久清空',
         source: { manual: '从本机删除', sync: '设备同步删除' },
       },
       deviceSync: {

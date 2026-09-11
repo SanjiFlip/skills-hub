@@ -124,6 +124,7 @@ export const ko = {
         "helpLocal": "복구 데이터는 다른 장치로 동기화되지 않습니다. 영구 삭제 또는 만료 정리 시 백업 파일과 복구 기록이 제거되어 휴지통에서 복원할 수 없습니다.",
       "toolsCount": "동기화된 도구 {{count}}개",
         errors: {
+          "changed": "휴지통 내용이 변경되었습니다. 최신 목록을 확인한 후 다시 확인하세요.",
           "locationOccupied": "원래 복원 위치가 사용 중입니다. 기존 파일이나 설치된 스킬을 확인한 후 다시 시도하세요. 기존 파일은 덮어쓰지 않았습니다.",
           "skillExists": "이 스킬이 이미 존재합니다. 내 스킬에서 확인하세요.",
           "itemMissing": "이 휴지통 항목이 더 이상 존재하지 않습니다. 휴지통을 다시 열어 목록을 새로 고치세요.",
@@ -132,7 +133,8 @@ export const ko = {
           "snapshotInvalid": "복구 정보를 읽을 수 없습니다. 백업 파일을 보존하고 다시 시도하세요.",
           "loadFailed": "휴지통을 불러올 수 없습니다. 페이지를 다시 열어 시도하세요.",
           "restoreFailed": "복원을 완료하지 못했습니다. 내 스킬과 휴지통의 결과를 확인한 후 다시 시도하세요.",
-          "deleteFailed": "영구 삭제를 완료하지 못했습니다. 휴지통을 다시 열어 결과를 확인한 후 다시 시도하세요."
+          "deleteFailed": "영구 삭제를 완료하지 못했습니다. 휴지통을 다시 열어 결과를 확인한 후 다시 시도하세요.",
+          "clearFailed": "휴지통을 비우지 못했습니다. 남은 항목을 확인한 후 다시 시도하세요."
 },
         locations: {"manual_backup": "직접 삭제한 파일 백업", "sync_backup": "장치 동기화로 삭제된 파일 백업", "hint": "이 경로는 현재 장치에서 자동으로 읽습니다. 각 항목에는 별도의 백업 하위 폴더가 있습니다. 경로를 선택하고 복사하여 찾으세요. 폴더는 필요할 때 생성됩니다.", "loading": "저장 위치 불러오는 중…", "unavailable": "저장 위치를 확인할 수 없습니다. 데스크톱 앱에서 안내를 다시 열어 시도하세요."},
       "nav": "휴지통", "title": "휴지통", "subtitle": "삭제된 스킬과 로컬 설정을 복원합니다.",
@@ -145,6 +147,9 @@ export const ko = {
       "previousState": "이전 상태", "enabled": "활성화됨", "disabled": "비활성화됨", "restoreIncludes": "복원 항목", "restoreIncludesHelp": "저장된 다음 정보를 복원합니다.", "filesAndDescription": "스킬 파일 및 설명",
       "tagsCount": "태그 {{count}}개", "targetsCount": "도구 동기화 관계 {{count}}개", "previousTargets": "이전 도구 동기화", "restore": "복원", "restored": "{{name}}을(를) 복원했습니다.",
       "deletePermanently": "영구 삭제", "deletedPermanently": "{{name}}을(를) 영구 삭제했습니다.", "confirmTitle": "이 스킬을 영구 삭제하시겠습니까?", "confirmHelp": "{{name}}과 저장된 복구 데이터는 삭제 후 복원할 수 없습니다.", "confirmDelete": "영구 삭제",
+      "clearAll": "휴지통 비우기", "cleared_one": "휴지통에서 항목 {{count}}개를 영구 삭제했습니다.", "cleared_other": "휴지통에서 항목 {{count}}개를 영구 삭제했습니다.",
+      "clearConfirmTitle": "휴지통을 비우시겠습니까?", "clearConfirmHelp_one": "스킬 {{count}}개와 백업 파일 및 복구 정보를 영구 삭제합니다. 이 작업은 취소할 수 없습니다.", "clearConfirmHelp_other": "스킬 {{count}}개와 백업 파일 및 복구 정보를 모두 영구 삭제합니다. 이 작업은 취소할 수 없습니다.",
+      "clearConfirmInstruction": "확인하려면 “{{phrase}}”을(를) 입력하세요.", "clearConfirmLabel": "확인 문구", "clearConfirmPhrase": "휴지통 비우기", "confirmClear": "영구적으로 비우기",
       "source": { "manual": "이 컴퓨터에서 삭제", "sync": "장치 동기화로 삭제" }
     },
     "deviceSync": {
