@@ -54,13 +54,36 @@ test('a test-only item does not hide later production bypasses', async () => {
     [
       '#[cfg(test)]',
       'fn helper() {}',
-      'fn refresh() { reqwest::blocking::Client::builder(); }',
       '#[cfg(test)]',
       'mod tests { reqwest::blocking::Client::builder(); }',
+      'fn refresh() { reqwest::blocking::Client::builder(); }',
     ].join('\n'),
   )
 
   assert.deepEqual(await checkNetworkBoundaries(root), [
-    { rule: 'direct-http-client', file: 'src-tauri/src/core/credentials.rs', line: 3 },
+    { rule: 'direct-http-client', file: 'src-tauri/src/core/credentials.rs', line: 5 },
   ])
+})
+
+test('reports common direct HTTP client construction variants and aliases', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'skills-hub-network-boundary-'))
+  await write(
+    root,
+    'src-tauri/src/core/bypass.rs',
+    [
+      'use reqwest::blocking::Client as HttpClient;',
+      'ClientBuilder::new();',
+      'Client::default();',
+      'HttpClient::new();',
+    ].join('\n'),
+  )
+
+  assert.deepEqual(
+    (await checkNetworkBoundaries(root)).map(({ rule, line }) => [rule, line]),
+    [
+      ['direct-http-client', 2],
+      ['direct-http-client', 3],
+      ['direct-http-client', 4],
+    ],
+  )
 })

@@ -2,11 +2,7 @@ import { readdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const RULES = [
-  {
-    rule: 'direct-http-client',
-    pattern: /(?:reqwest::blocking::)?Client::(?:builder|new)\s*\(/,
-  },
+const STATIC_RULES = [
   {
     rule: 'remote-git-transport',
     pattern: /(?:FetchOptions|PushOptions)::new\s*\(|Repository::clone\s*\(/,
@@ -16,6 +12,43 @@ const RULES = [
     pattern: /std::env::var\s*\(\s*"(?:HTTP|HTTPS|ALL|NO)_PROXY"/i,
   },
 ]
+
+const escapePattern = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+const httpClientPattern = (source) => {
+  const names = ['Client', 'ClientBuilder']
+  for (const match of source.matchAll(/\b(?:Client|ClientBuilder)\s+as\s+([A-Za-z_]\w*)/g)) {
+    names.push(match[1])
+  }
+  const constructors = names.map(escapePattern).join('|')
+  return new RegExp(
+    `\\b(?:(?:reqwest(?:::blocking)?::)?(?:${constructors}))::(?:builder|new|default)\\s*\\(`,
+  )
+}
+
+const countCharacter = (value, character) =>
+  [...value].filter((candidate) => candidate === character).length
+
+const testOnlyLines = (lines) => {
+  const skipped = new Set()
+  for (let index = 0; index < lines.length; index += 1) {
+    if (lines[index].trim() !== '#[cfg(test)]') continue
+    let item = index + 1
+    while (item < lines.length && lines[item].trim() === '') item += 1
+    if (!/^mod\s+\w+\b/.test(lines[item]?.trim() ?? '')) continue
+
+    let depth = 0
+    let foundOpeningBrace = false
+    for (let current = index; current < lines.length; current += 1) {
+      skipped.add(current)
+      depth += countCharacter(lines[current], '{')
+      depth -= countCharacter(lines[current], '}')
+      foundOpeningBrace ||= lines[current].includes('{')
+      if (foundOpeningBrace && depth === 0) break
+    }
+  }
+  return skipped
+}
 
 const collectRustFiles = async (directory) => {
   const entries = await readdir(directory, { withFileTypes: true })
@@ -43,15 +76,16 @@ export const checkNetworkBoundaries = async (rootDir) => {
     if (relative === 'src-tauri/src/core/network_proxy.rs' || isTestFile(relative)) {
       continue
     }
-    const lines = (await readFile(file, 'utf8')).split('\n')
-    const inlineTestsStart = lines.findIndex(
-      (line, index) =>
-        line.trim() === '#[cfg(test)]' &&
-        lines.slice(index + 1, index + 4).some((next) => /^mod tests\b/.test(next.trim())),
-    )
+    const source = await readFile(file, 'utf8')
+    const lines = source.split('\n')
+    const skipped = testOnlyLines(lines)
+    const rules = [
+      { rule: 'direct-http-client', pattern: httpClientPattern(source) },
+      ...STATIC_RULES,
+    ]
     for (let index = 0; index < lines.length; index += 1) {
-      if (inlineTestsStart >= 0 && index >= inlineTestsStart) continue
-      for (const { rule, pattern } of RULES) {
+      if (skipped.has(index)) continue
+      for (const { rule, pattern } of rules) {
         if (pattern.test(lines[index])) {
           violations.push({ rule, file: relative, line: index + 1 })
         }

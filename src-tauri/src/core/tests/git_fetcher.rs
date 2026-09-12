@@ -4,7 +4,7 @@ use std::net::TcpListener;
 use std::sync::mpsc;
 use std::time::Duration;
 
-use super::git_cmd;
+use super::{git_cmd, git_cmd_for_remote};
 use crate::core::git_fetcher::{clone_or_pull, clone_or_pull_sparse, clone_or_pull_via_libgit2};
 
 fn commit_file(repo: &git2::Repository, path: &str, content: &[u8], msg: &str) -> git2::Oid {
@@ -134,6 +134,34 @@ fn git_command_clears_inherited_proxy_when_application_proxy_is_disabled() {
             cmd.get_envs()
                 .any(|(key, value)| key == name && value.is_none()),
             "{name} should be removed"
+        );
+    }
+}
+
+#[test]
+fn application_proxy_overrides_url_specific_global_git_proxy() {
+    let config_dir = tempfile::tempdir().unwrap();
+    let config_path = config_dir.path().join("gitconfig");
+    std::fs::write(
+        &config_path,
+        "[http \"https://github.com\"]\n\tproxy = http://127.0.0.1:4567\n",
+    )
+    .unwrap();
+    let remote_url = "https://github.com/example/repo.git";
+
+    for expected in [Some("http://127.0.0.1:7890"), None] {
+        let mut cmd = git_cmd_for_remote(expected, Some(remote_url));
+        let output = cmd
+            .env("GIT_CONFIG_GLOBAL", &config_path)
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .args(["config", "--get-urlmatch", "http.proxy", remote_url])
+            .output()
+            .unwrap();
+
+        assert!(output.status.success());
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout).trim(),
+            expected.unwrap_or_default()
         );
     }
 }

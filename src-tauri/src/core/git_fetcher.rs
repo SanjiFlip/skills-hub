@@ -145,7 +145,7 @@ pub fn clone_or_pull_sparse(
 
         let out = run_cmd_with_timeout(
             {
-                let mut cmd = git_cmd(proxy_url);
+                let mut cmd = git_cmd_for_remote(proxy_url, Some(repo_url));
                 cmd.arg("-C").arg(dest).args([
                     "sparse-checkout",
                     "set",
@@ -167,7 +167,7 @@ pub fn clone_or_pull_sparse(
 
         let out = run_cmd_with_timeout(
             {
-                let mut cmd = git_cmd(proxy_url);
+                let mut cmd = git_cmd_for_remote(proxy_url, Some(repo_url));
                 cmd.arg("-C").arg(dest).args(["fetch", "--prune", "origin"]);
                 cmd
             },
@@ -222,7 +222,7 @@ pub fn clone_or_pull_sparse(
             }
         }
     } else {
-        let mut cmd = git_cmd(proxy_url);
+        let mut cmd = git_cmd_for_remote(proxy_url, Some(repo_url));
         cmd.arg("clone").args([
             "--depth",
             "1",
@@ -246,7 +246,7 @@ pub fn clone_or_pull_sparse(
 
         let out = run_cmd_with_timeout(
             {
-                let mut cmd = git_cmd(proxy_url);
+                let mut cmd = git_cmd_for_remote(proxy_url, Some(repo_url));
                 cmd.arg("-C").arg(dest).args([
                     "sparse-checkout",
                     "set",
@@ -354,6 +354,10 @@ fn git_bin_works(bin: &str) -> bool {
 }
 
 fn git_cmd(proxy_url: Option<&str>) -> Command {
+    git_cmd_for_remote(proxy_url, None)
+}
+
+fn git_cmd_for_remote(proxy_url: Option<&str>, remote_url: Option<&str>) -> Command {
     let bin = resolve_git_bin().unwrap_or_else(|| "git".to_string());
     let mut cmd = Command::new(bin);
     let proxy_url = proxy_url.map(str::trim).unwrap_or_default();
@@ -361,6 +365,12 @@ fn git_cmd(proxy_url: Option<&str>) -> Command {
         .arg(format!("http.proxy={proxy_url}"))
         .arg("-c")
         .arg(format!("https.proxy={proxy_url}"));
+    if let Some(remote_url) =
+        remote_url.filter(|url| url.starts_with("https://") || url.starts_with("http://"))
+    {
+        cmd.arg("-c")
+            .arg(format!("http.{remote_url}.proxy={proxy_url}"));
+    }
     for name in [
         "http_proxy",
         "https_proxy",
@@ -455,7 +465,7 @@ fn clone_or_pull_via_git_cli(
         // Fetch updates.
         let out = run_cmd_with_timeout(
             {
-                let mut cmd = git_cmd(proxy_url);
+                let mut cmd = git_cmd_for_remote(proxy_url, Some(repo_url));
                 cmd.arg("-C").arg(dest).args(["fetch", "--prune", "origin"]);
                 cmd
             },
@@ -512,7 +522,7 @@ fn clone_or_pull_via_git_cli(
         }
     } else {
         // Clone.
-        let mut cmd = git_cmd(proxy_url);
+        let mut cmd = git_cmd_for_remote(proxy_url, Some(repo_url));
         cmd.arg("clone")
             .args(["--depth", "1", "--filter=blob:none", "--no-tags"]);
         if let Some(branch) = branch {
