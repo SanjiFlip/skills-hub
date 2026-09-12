@@ -225,8 +225,8 @@ cargo test
 
 ## 支持的系统
 
-- macOS（已验证）
-- Windows（按架构应支持，未做本地验证）
+- macOS
+- Windows
 - Linux（按架构应支持，未做本地验证）
 
 ## License

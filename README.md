@@ -232,8 +232,8 @@ cargo test
 
 ## Supported Platforms
 
-- macOS (verified)
-- Windows (expected by design; not validated locally)
+- macOS
+- Windows
 - Linux (expected by design; not validated locally)
 
 ## License
