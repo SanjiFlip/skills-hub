@@ -35,7 +35,7 @@ pub fn open_or_clone(
         fetch.remote_callbacks(callbacks(config, token));
         fetch.follow_redirects(remote_redirect_policy(token));
         let mut builder = RepoBuilder::new();
-        builder.fetch_options(fetch).branch(&config.branch);
+        builder.fetch_options(fetch);
         builder
             .clone(&config.remote_url, path)
             .context("clone device sync repository")
@@ -423,6 +423,33 @@ mod tests {
 
         let remote = Repository::open_bare(&bare_path).unwrap();
         assert_eq!(remote.refname_to_id("refs/heads/main").unwrap(), second);
+    }
+
+    #[test]
+    fn first_sync_initializes_an_empty_remote_repository() {
+        let temp = tempfile::tempdir().unwrap();
+        let bare_path = temp.path().join("remote.git");
+        Repository::init_bare(&bare_path).unwrap();
+        let config = DeviceSyncConfig {
+            remote_url: bare_path.to_string_lossy().to_string(),
+            ..DeviceSyncConfig::default()
+        };
+
+        let checkout = open_or_clone(&temp.path().join("checkout"), &config, None, "").unwrap();
+        assert_eq!(
+            fetch_and_checkout(&checkout, &config, None, "").unwrap(),
+            None
+        );
+        let first = commit_file(
+            &checkout,
+            ".skills-hub/manifest.json",
+            r#"{"format_version":1,"skills":{}}"#,
+            None,
+        );
+        push(&checkout, &config, None, first, "").unwrap();
+
+        let remote = Repository::open_bare(&bare_path).unwrap();
+        assert_eq!(remote.refname_to_id("refs/heads/main").unwrap(), first);
     }
 
     #[test]

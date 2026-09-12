@@ -180,7 +180,7 @@ impl GitProvider for ApiProvider {
             ProviderId::Gitlab => {
                 "/projects?membership=true&simple=true&per_page=100&order_by=last_activity_at"
             }
-            ProviderId::Gitee => "/user/repos?type=all&per_page=100&sort=updated",
+            ProviderId::Gitee => "/user/repos?visibility=all&per_page=100&sort=updated",
         };
         let response = Self::checked(
             self.client
@@ -227,6 +227,11 @@ impl GitProvider for ApiProvider {
 
 fn normalize_repository(repo: RepositoryResponse) -> Result<RemoteRepository> {
     use super::types::RepositoryVisibility;
+    let web_url = repo
+        .html_url
+        .clone()
+        .or_else(|| repo.web_url.clone())
+        .unwrap_or_default();
     let visibility = match repo.visibility.as_deref() {
         Some("public") => RepositoryVisibility::Public,
         Some("private") => RepositoryVisibility::Private,
@@ -241,10 +246,11 @@ fn normalize_repository(repo: RepositoryResponse) -> Result<RemoteRepository> {
     Ok(RemoteRepository {
         visibility,
         name: repo.name,
-        web_url: repo.html_url.or(repo.web_url).unwrap_or_default(),
+        web_url,
         clone_url: repo
             .clone_url
             .or(repo.http_url_to_repo)
+            .or(repo.html_url)
             .context("provider response missing HTTPS clone URL")?,
         ssh_url: repo.ssh_url.or(repo.ssh_url_to_repo),
         private: repo.private.unwrap_or_else(|| {
@@ -467,6 +473,27 @@ mod tests {
         let error = provider.validate_token("token").unwrap_err().to_string();
         assert!(!error.contains('\n'));
         request.assert();
+    }
+
+    #[test]
+    fn gitee_lists_repositories_with_supported_filters_and_real_response_shape() {
+        let mut server = mockito::Server::new();
+        let repositories = server
+            .mock(
+                "GET",
+                "/user/repos?visibility=all&per_page=100&sort=updated",
+            )
+            .match_header("authorization", "Bearer token")
+            .with_status(200)
+            .with_body(r#"[{"name":"sync","html_url":"https://gitee/repo.git","clone_url":null,"ssh_url":"git@gitee:repo.git","private":true}]"#)
+            .create();
+        let provider = ApiProvider::with_base_url(ProviderId::Gitee, server.url());
+
+        let result = provider.list_repositories("token").unwrap();
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].clone_url, "https://gitee/repo.git");
+        repositories.assert();
     }
 
     #[test]

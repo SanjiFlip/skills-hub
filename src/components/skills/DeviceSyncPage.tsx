@@ -86,6 +86,8 @@ type DeviceSyncPageProps = {
 
 const DEVICE_SYNC_HISTORY_PAGE_SIZE = 50
 const DEVICE_SYNC_HISTORY_LIMIT = 100
+const comparableRepositoryUrl = (value: string) =>
+  value.trim().replace(/\/+$/, '').replace(/\.git$/i, '')
 
 const DeviceSyncPage = ({
   active,
@@ -137,19 +139,22 @@ const DeviceSyncPage = ({
     async (
       provider: DeviceSyncProvider,
       credentialKey: string | null,
+      token: string | null = null,
       forceRefresh = false,
     ) => {
       const requestId = ++repositoryRequestRef.current
       const requestKey = `${provider}:${credentialKey ?? ''}`
       const existingRequest = activeRepositoryRequestRef.current
+      const usesManualToken = Boolean(token)
       const request =
-        !forceRefresh && existingRequest?.key === requestKey
+        !usesManualToken && !forceRefresh && existingRequest?.key === requestKey
           ? existingRequest.promise
           : invoke<DeviceSyncRemoteRepository[]>('list_device_sync_repositories', {
               providerId: provider,
+              token,
               credentialKey,
             })
-      if (request !== existingRequest?.promise) {
+      if (!usesManualToken && request !== existingRequest?.promise) {
         activeRepositoryRequestRef.current = { key: requestKey, promise: request }
         void request.then(
           () => {
@@ -172,6 +177,16 @@ const DeviceSyncPage = ({
         )
         if (requestId !== repositoryRequestRef.current) return
         setRepositories(result.filter((repository) => repository.private))
+        setForm((current) => {
+          const currentUrl = comparableRepositoryUrl(current.remoteUrl)
+          if (!currentUrl) return current
+          const matchingRepository = result.find(
+            (repository) => comparableRepositoryUrl(repository.clone_url) === currentUrl,
+          )
+          return matchingRepository
+            ? selectSyncRepository(current, matchingRepository)
+            : current
+        })
         setRepositoryLoadState('loaded')
       } catch (error) {
         if (requestId === repositoryRequestRef.current) {
@@ -358,6 +373,7 @@ const DeviceSyncPage = ({
           oauthCredentialKey: credentialKey,
           accountLogin: result.account?.login ?? '',
           username: result.account?.login ?? current.username,
+          token: '',
         }))
         setOauthFlow(null)
         toast.success(t('deviceSync.authorizationComplete'))
@@ -483,6 +499,24 @@ const DeviceSyncPage = ({
     setOauthFlow(null)
   }
 
+  const changeToken = (token: string) => {
+    repositoryRequestRef.current += 1
+    activeRepositoryRequestRef.current = null
+    setRepositories([])
+    setRepositoryLoadState('idle')
+    setRepositoryPickerOpen(false)
+    setRepositorySearch('')
+    setForm((current) => {
+      const httpsRepository = current.remoteUrl.startsWith('https://')
+      return {
+        ...current,
+        token,
+        visibility: httpsRepository ? 'unknown' : current.visibility,
+        publicUploadConfirmed: httpsRepository ? false : current.publicUploadConfirmed,
+      }
+    })
+  }
+
   const changeProvider = (provider: DeviceSyncProvider) => {
     if (oauthFlow) void invoke('cancel_device_sync_oauth', { flowId: oauthFlow.flow_id })
     if (form.oauthCredentialKey) void invoke('clear_device_sync_pending_oauth')
@@ -497,6 +531,7 @@ const DeviceSyncPage = ({
       ...current,
       provider,
       remoteUrl: '',
+      token: '',
       visibility: 'unknown',
       publicUploadConfirmed: false,
       oauthCredentialKey: '',
@@ -589,6 +624,7 @@ const DeviceSyncPage = ({
   const providerName = form.provider === 'github' ? 'GitHub' : form.provider === 'gitlab' ? 'GitLab' : 'Gitee'
   const oauthAvailable = oauthAvailability.find((item) => item.provider === form.provider)?.available ?? false
   const authorized = Boolean(form.oauthCredentialKey || (config?.has_credential && config.provider === form.provider))
+  const canLoadRepositories = authorized || Boolean(form.token.trim())
   const experience = getDeviceSyncExperience({
     configured: config !== null,
     authorized,
@@ -603,7 +639,7 @@ const DeviceSyncPage = ({
   })
   const retryRepositories = () => {
     setRepositoryPickerOpen(true)
-    void loadRepositories(form.provider, form.oauthCredentialKey || null, true).catch(() => undefined)
+    void loadRepositories(form.provider, form.oauthCredentialKey || null, form.token || null, true).catch(() => undefined)
   }
   const toggleRepositoryPicker = () => {
     const nextOpen = reduceRepositoryPicker(repositoryPickerOpen, 'toggle')
@@ -803,12 +839,12 @@ const DeviceSyncPage = ({
               </div>
               <p className="device-sync-security-note"><ShieldCheck size={14} />{t(authorized ? 'deviceSync.authorizationStored' : 'deviceSync.authorizationStorageNote')}</p>
 
-              {authorized ? <div className="device-sync-repository-step"><div className="device-sync-repository-step-head"><span><strong>{t('deviceSync.chooseRepository')}</strong><small>{t('deviceSync.repositoryStorageHelp')}</small></span><div className="device-sync-repository-actions"><button className="btn btn-secondary" type="button" disabled={working || repositoryLoadState === 'loading'} onClick={retryRepositories}>{t(form.remoteUrl ? 'deviceSync.refreshRepositories' : 'deviceSync.loadRepositories')}</button><button className="btn btn-secondary" type="button" disabled={!controls.canCreateRepository} onClick={createRepository}>{busy === 'create' ? <LoaderCircle className="spin" size={15} /> : null}{t('deviceSync.createPrivateRepository')}</button></div></div>
+              {canLoadRepositories ? <div className="device-sync-repository-step"><div className="device-sync-repository-step-head"><span><strong>{t('deviceSync.chooseRepository')}</strong><small>{t('deviceSync.repositoryStorageHelp')}</small></span><div className="device-sync-repository-actions"><button className="btn btn-secondary" type="button" disabled={working || repositoryLoadState === 'loading'} onClick={retryRepositories}>{t(form.remoteUrl ? 'deviceSync.refreshRepositories' : 'deviceSync.loadRepositories')}</button><button className="btn btn-secondary" type="button" disabled={!controls.canCreateRepository} onClick={createRepository}>{busy === 'create' ? <LoaderCircle className="spin" size={15} /> : null}{t('deviceSync.createPrivateRepository')}</button></div></div>
                 <button className={`device-sync-repository-current${form.remoteUrl ? ' selected' : ''}`} type="button" aria-expanded={repositoryPickerOpen} aria-controls="setup-device-sync-repositories" onClick={toggleRepositoryPicker}><span><LockKeyhole size={15} /><strong>{form.remoteUrl ? repositoryDisplayName : t('deviceSync.chooseRepositoryPlaceholder')}</strong>{form.remoteUrl ? <small>{t('deviceSync.currentRepository')}</small> : null}</span>{repositoryPickerOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}</button>
                 {repositoryPickerOpen ? <div id="setup-device-sync-repositories" className="device-sync-repository-picker">{repositoryLoadState === 'loading' ? <div className="device-sync-repository-feedback loading" role="status" aria-live="polite"><LoaderCircle className="spin" size={16} /><span>{t('deviceSync.loadingRepositories')}</span></div> : null}{['error', 'timeout', 'credential-error'].includes(repositoryLoadState) ? <div className="device-sync-repository-feedback error" role="alert"><AlertTriangle size={16} /><span>{repositoryErrorMessage}</span><button type="button" onClick={retryRepositories}>{t('deviceSync.retry')}</button></div> : null}{repositoryLoadState === 'loaded' && repositories.length ? <>{repositories.length > 6 ? <label className="device-sync-repository-search"><Search size={15} /><input type="search" value={repositorySearch} aria-label={t('deviceSync.searchRepositories')} placeholder={t('deviceSync.searchRepositories')} onChange={(event) => setRepositorySearch(event.target.value)} /></label> : null}<div className="device-sync-repository-choices">{filteredRepositories.map((repository) => <label key={repository.clone_url} className={`device-sync-repository-choice${form.remoteUrl === repository.clone_url ? ' selected' : ''}`}><input type="radio" name="device-sync-repository" value={repository.clone_url} checked={form.remoteUrl === repository.clone_url} onChange={(event) => selectRepository(event.target.value)} /><span><strong>{repository.name}</strong>{repository.name === 'skills-hub-sync' ? <small>{t('deviceSync.recommended')}</small> : null}</span><LockKeyhole size={15} /></label>)}</div>{!filteredRepositories.length ? <p className="device-sync-repository-empty">{t('deviceSync.noMatchingRepositories')}</p> : null}</> : null}{repositoryLoadState === 'loaded' && !repositories.length ? <p className="device-sync-repository-empty">{t('deviceSync.noPrivateRepositories')}</p> : null}</div> : null}
               </div> : null}
 
-              <details key={form.provider} className="device-sync-advanced" open={!oauthAvailable || undefined}><summary>{t('deviceSync.otherConnectionMethods')}</summary><p>{t('deviceSync.advancedSettingsHelp')}</p><div className="device-sync-advanced-grid"><label className="device-sync-wide"><span>{t('deviceSync.remoteUrl')}</span><input value={form.remoteUrl} placeholder="https://github.com/you/skills-hub-sync.git" onChange={(event) => setForm(changeSyncRepositoryUrl(form, event.target.value))} /></label><label><span>{t('deviceSync.branch')}</span><input value={form.branch} onChange={(event) => setForm({ ...form, branch: event.target.value })} /></label><label><span>{t('deviceSync.username')}</span><input value={form.username} onChange={(event) => setForm({ ...form, username: event.target.value })} /></label><label className="device-sync-wide"><span>{t('deviceSync.token')}</span><input type="password" value={form.token} placeholder={t('deviceSync.tokenPlaceholder')} onChange={(event) => setForm({ ...form, token: event.target.value })} /><small><ShieldCheck size={13} />{t('deviceSync.tokenHelp')}</small></label></div>{visibilitySettings}</details>
+              <details key={form.provider} className="device-sync-advanced" open={!oauthAvailable || undefined}><summary>{t('deviceSync.otherConnectionMethods')}</summary><p>{t('deviceSync.advancedSettingsHelp')}</p><div className="device-sync-advanced-grid"><label className="device-sync-wide"><span>{t('deviceSync.remoteUrl')}</span><input value={form.remoteUrl} placeholder="https://github.com/you/skills-hub-sync.git" onChange={(event) => setForm(changeSyncRepositoryUrl(form, event.target.value))} /></label><label><span>{t('deviceSync.branch')}</span><input value={form.branch} onChange={(event) => setForm({ ...form, branch: event.target.value })} /></label><label><span>{t('deviceSync.username')}</span><input value={form.username} onChange={(event) => setForm({ ...form, username: event.target.value })} /></label><label className="device-sync-wide"><span>{t('deviceSync.token')}</span><input type="password" value={form.token} placeholder={t('deviceSync.tokenPlaceholder')} onChange={(event) => changeToken(event.target.value)} /><small><ShieldCheck size={13} />{t('deviceSync.tokenHelp')}</small></label></div>{visibilitySettings}</details>
 
               <div className="device-sync-scope">
                 <strong>{t('deviceSync.whatSyncs')}</strong>
@@ -880,7 +916,7 @@ const DeviceSyncPage = ({
                   {!isDeviceSyncScheduleValid(form.schedule) ? <p className="device-sync-schedule-error" role="alert">{t('deviceSync.invalidSchedule')}</p> : null}
                 </div> : null}
               </section>
-              <section><details className="device-sync-advanced"><summary>{t('deviceSync.advancedSettings')}</summary><p>{t('deviceSync.advancedSettingsHelp')}</p><div className="device-sync-advanced-grid"><label className="device-sync-wide"><span>{t('deviceSync.remoteUrl')}</span><input value={form.remoteUrl} onChange={(event) => setForm(changeSyncRepositoryUrl(form, event.target.value))} /></label><label><span>{t('deviceSync.branch')}</span><input value={form.branch} onChange={(event) => setForm({ ...form, branch: event.target.value })} /></label><label><span>{t('deviceSync.token')}</span><input type="password" value={form.token} placeholder={config.has_credential ? t('deviceSync.tokenStored') : t('deviceSync.tokenPlaceholder')} onChange={(event) => setForm({ ...form, token: event.target.value })} /></label></div>{visibilitySettings}</details></section>
+              <section><details className="device-sync-advanced"><summary>{t('deviceSync.advancedSettings')}</summary><p>{t('deviceSync.advancedSettingsHelp')}</p><div className="device-sync-advanced-grid"><label className="device-sync-wide"><span>{t('deviceSync.remoteUrl')}</span><input value={form.remoteUrl} onChange={(event) => setForm(changeSyncRepositoryUrl(form, event.target.value))} /></label><label><span>{t('deviceSync.branch')}</span><input value={form.branch} onChange={(event) => setForm({ ...form, branch: event.target.value })} /></label><label><span>{t('deviceSync.token')}</span><input type="password" value={form.token} placeholder={config.has_credential ? t('deviceSync.tokenStored') : t('deviceSync.tokenPlaceholder')} onChange={(event) => changeToken(event.target.value)} /></label></div>{visibilitySettings}</details></section>
             </div>
             <footer><button className="btn btn-ghost device-sync-disconnect" type="button" disabled={working || synchronizationInProgress} onClick={disconnect}>{t('deviceSync.disconnect')}</button><span /><button className="btn btn-secondary" type="button" onClick={() => setSettingsDrawerOpen(false)}>{t('cancel')}</button><button className="btn btn-primary" type="button" disabled={!controls.canSave} onClick={save}>{busy === 'save' ? <LoaderCircle className="spin" size={15} /> : null}{t('deviceSync.saveChanges')}</button></footer>
           </aside>

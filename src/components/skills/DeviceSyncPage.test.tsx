@@ -55,6 +55,108 @@ describe('DeviceSyncPage', () => {
     expect(screen.getByText('deviceSync.otherConnectionMethods').closest('details')?.open).toBe(true)
   })
 
+  it('matches a typed Gitee URL after loading repositories and identifies visibility', async () => {
+    let savedConfig: Record<string, unknown> | null = null
+    invokeMock.mockImplementation((command: string, args?: { config?: Record<string, unknown> }) => {
+      if (command === 'get_device_sync_config') return Promise.resolve(savedConfig)
+      if (command === 'get_device_sync_pending_oauth') return Promise.resolve(null)
+      if (command === 'get_device_sync_oauth_availability') return Promise.resolve([{ provider: 'gitee', available: false }])
+      if (command === 'get_device_sync_status') return Promise.resolve({ configured: false, is_running: false, conflict_count: 0 })
+      if (command === 'list_device_sync_repositories') {
+        return Promise.resolve([{
+          name: 'skills-hub-sync',
+          web_url: 'https://gitee.com/example/skills-hub-sync',
+          clone_url: 'https://gitee.com/example/skills-hub-sync.git',
+          ssh_url: 'git@gitee.com:example/skills-hub-sync.git',
+          private: true,
+          visibility: 'private',
+        }])
+      }
+      if (command === 'save_device_sync_config') {
+        savedConfig = { ...args?.config, has_credential: true }
+        return Promise.resolve(savedConfig)
+      }
+      if (command === 'run_device_sync') return Promise.resolve({ status: 'success', changes: { added: 0, updated: 0, deleted: 0, conflicted: 0 } })
+      return Promise.resolve([])
+    })
+    render(<DeviceSyncPage active isTauri onSkillsChanged={vi.fn(async () => undefined)} onConflictCountChange={vi.fn()} onOpenToolIssues={vi.fn()} t={((key: string) => key) as TFunction} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Gitee' }))
+    const remoteUrlInput = screen.getByText('deviceSync.remoteUrl').closest('label')?.querySelector('input')
+    expect(remoteUrlInput).toBeTruthy()
+    fireEvent.change(remoteUrlInput!, { target: { value: 'https://gitee.com/example/skills-hub-sync' } })
+    const tokenInput = screen.getByText('deviceSync.token').closest('label')?.querySelector('input')
+    expect(tokenInput).toBeTruthy()
+    fireEvent.change(tokenInput!, { target: { value: 'gitee-test-token' } })
+    expect(invokeMock.mock.calls.some(([command]) => command === 'list_device_sync_repositories')).toBe(false)
+    fireEvent.click(await screen.findByRole('button', { name: 'deviceSync.refreshRepositories' }))
+
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith('list_device_sync_repositories', {
+      providerId: 'gitee',
+      token: 'gitee-test-token',
+      credentialKey: null,
+    }))
+    await waitFor(() => expect(screen.getByLabelText('deviceSync.repositoryVisibility').textContent).toBe('deviceSync.visibility.private'))
+    fireEvent.click(screen.getByRole('button', { name: 'deviceSync.startSync' }))
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith('save_device_sync_config', {
+      config: expect.objectContaining({
+        provider: 'gitee',
+        remote_url: 'https://gitee.com/example/skills-hub-sync.git',
+        token: 'gitee-test-token',
+        visibility: 'private',
+      }),
+    }))
+    await waitFor(() => expect(invokeMock.mock.calls.some(([command]) => command === 'run_device_sync')).toBe(true))
+  })
+
+  it('clears a manual token when switching Git providers', async () => {
+    invokeMock.mockImplementation((command: string) => {
+      if (command === 'get_device_sync_config' || command === 'get_device_sync_pending_oauth') return Promise.resolve(null)
+      if (command === 'get_device_sync_oauth_availability') return Promise.resolve([{ provider: 'gitee', available: false }])
+      if (command === 'get_device_sync_status') return Promise.resolve({ configured: false, is_running: false, conflict_count: 0 })
+      return Promise.resolve([])
+    })
+    render(<DeviceSyncPage active isTauri onSkillsChanged={vi.fn(async () => undefined)} onConflictCountChange={vi.fn()} onOpenToolIssues={vi.fn()} t={((key: string) => key) as TFunction} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Gitee' }))
+    const giteeTokenInput = screen.getByText('deviceSync.token').closest('label')?.querySelector('input')
+    fireEvent.change(giteeTokenInput!, { target: { value: 'gitee-test-token' } })
+    fireEvent.click(screen.getByRole('button', { name: 'GitHub' }))
+
+    const githubTokenInput = screen.getByText('deviceSync.token').closest('label')?.querySelector('input')
+    expect(githubTokenInput?.value).toBe('')
+    expect(screen.queryByRole('button', { name: 'deviceSync.loadRepositories' })).toBeNull()
+  })
+
+  it('invalidates repository visibility when the manual token changes', async () => {
+    invokeMock.mockImplementation((command: string) => {
+      if (command === 'get_device_sync_config' || command === 'get_device_sync_pending_oauth') return Promise.resolve(null)
+      if (command === 'get_device_sync_oauth_availability') return Promise.resolve([{ provider: 'gitee', available: false }])
+      if (command === 'get_device_sync_status') return Promise.resolve({ configured: false, is_running: false, conflict_count: 0 })
+      if (command === 'list_device_sync_repositories') return Promise.resolve([{
+        name: 'skills-hub-sync',
+        web_url: 'https://gitee.com/example/skills-hub-sync',
+        clone_url: 'https://gitee.com/example/skills-hub-sync.git',
+        ssh_url: 'git@gitee.com:example/skills-hub-sync.git',
+        private: true,
+        visibility: 'private',
+      }])
+      return Promise.resolve([])
+    })
+    render(<DeviceSyncPage active isTauri onSkillsChanged={vi.fn(async () => undefined)} onConflictCountChange={vi.fn()} onOpenToolIssues={vi.fn()} t={((key: string) => key) as TFunction} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Gitee' }))
+    const tokenInput = screen.getByText('deviceSync.token').closest('label')?.querySelector('input')
+    fireEvent.change(tokenInput!, { target: { value: 'first-token' } })
+    fireEvent.click(await screen.findByRole('button', { name: 'deviceSync.loadRepositories' }))
+    fireEvent.click(await screen.findByRole('radio', { name: /skills-hub-sync/ }))
+    expect(screen.getByLabelText('deviceSync.repositoryVisibility').textContent).toBe('deviceSync.visibility.private')
+
+    fireEvent.change(tokenInput!, { target: { value: 'second-token' } })
+    expect(screen.getByLabelText('deviceSync.repositoryVisibility').textContent).toBe('deviceSync.visibility.unknown')
+    expect(screen.queryByRole('radio', { name: /skills-hub-sync/ })).toBeNull()
+  })
+
   it('shows named changes and explicitly marks legacy history without details', async () => {
     invokeMock.mockImplementation((command: string) => {
       if (command === 'get_device_sync_config') return Promise.resolve({ provider: 'github', remote_url: 'https://github.com/example/sync.git', branch: 'main', has_credential: true, visibility: 'private' })
