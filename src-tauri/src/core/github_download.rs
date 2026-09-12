@@ -273,6 +273,7 @@ pub fn parse_github_api_params(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::network_proxy::app_http_client;
 
     #[test]
     fn parse_github_api_params_extracts_correctly() {
@@ -431,7 +432,7 @@ mod tests {
             .with_status(200)
             .with_body("ok")
             .create();
-        let client = Client::new();
+        let client = app_http_client("", None).unwrap();
         let resp = client.get(format!("{}/ok", server.url())).send().unwrap();
         assert!(check_github_response(resp, "test").is_ok());
     }
@@ -450,7 +451,7 @@ mod tests {
             .with_header("x-ratelimit-reset", &reset_ts.to_string())
             .with_body("rate limited")
             .create();
-        let client = Client::new();
+        let client = app_http_client("", None).unwrap();
         let resp = client
             .get(format!("{}/limited", server.url()))
             .send()
@@ -476,7 +477,7 @@ mod tests {
             .with_status(403)
             .with_body("forbidden")
             .create();
-        let client = Client::new();
+        let client = app_http_client("", None).unwrap();
         let resp = client
             .get(format!("{}/forbidden", server.url()))
             .send()
@@ -494,7 +495,7 @@ mod tests {
             .with_status(404)
             .with_body("not found")
             .create();
-        let client = Client::new();
+        let client = app_http_client("", None).unwrap();
         let resp = client
             .get(format!("{}/notfound", server.url()))
             .send()

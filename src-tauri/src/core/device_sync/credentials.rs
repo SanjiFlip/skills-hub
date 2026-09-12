@@ -2,6 +2,7 @@ use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 
 use super::types::{CredentialUsage, ProviderId};
+use crate::core::network_proxy::app_http_client_no_redirects;
 
 #[cfg(debug_assertions)]
 pub(crate) const DEVICE_SYNC_KEYRING_SERVICE: &str = "com.skills-hub.device-sync.dev";
@@ -188,14 +189,29 @@ fn save_credential(
     store.set(key, &payload)
 }
 
+#[cfg(test)]
 pub fn resolve_access_token(
     store: &dyn CredentialStore,
     key: &str,
     expected_usage: &CredentialUsage,
 ) -> Result<Option<String>> {
-    resolve_access_token_with_refresh_endpoint(store, key, expected_usage, false, |provider| {
-        super::oauth::trusted_refresh_endpoint(provider)
-    })
+    resolve_access_token_with_proxy(store, key, expected_usage, "")
+}
+
+pub fn resolve_access_token_with_proxy(
+    store: &dyn CredentialStore,
+    key: &str,
+    expected_usage: &CredentialUsage,
+    proxy_url: &str,
+) -> Result<Option<String>> {
+    resolve_access_token_with_refresh_endpoint(
+        store,
+        key,
+        expected_usage,
+        false,
+        proxy_url,
+        super::oauth::trusted_refresh_endpoint,
+    )
 }
 
 pub(crate) enum PersonalAccessTokenLookup {
@@ -251,9 +267,28 @@ pub(crate) fn resolve_access_token_with_trusted_refresh_endpoint(
     trusted_refresh_endpoint: Option<&str>,
 ) -> Result<Option<String>> {
     let trusted_refresh_endpoint = trusted_refresh_endpoint.map(str::to_string);
-    resolve_access_token_with_refresh_endpoint(store, key, expected_usage, true, move |_| {
+    resolve_access_token_with_refresh_endpoint(store, key, expected_usage, true, "", move |_| {
         Ok(trusted_refresh_endpoint)
     })
+}
+
+#[cfg(test)]
+pub(crate) fn resolve_access_token_with_trusted_refresh_endpoint_and_proxy(
+    store: &dyn CredentialStore,
+    key: &str,
+    expected_usage: &CredentialUsage,
+    trusted_refresh_endpoint: Option<&str>,
+    proxy_url: &str,
+) -> Result<Option<String>> {
+    let trusted_refresh_endpoint = trusted_refresh_endpoint.map(str::to_string);
+    resolve_access_token_with_refresh_endpoint(
+        store,
+        key,
+        expected_usage,
+        true,
+        proxy_url,
+        move |_| Ok(trusted_refresh_endpoint),
+    )
 }
 
 fn resolve_access_token_with_refresh_endpoint<F>(
@@ -261,6 +296,7 @@ fn resolve_access_token_with_refresh_endpoint<F>(
     key: &str,
     expected_usage: &CredentialUsage,
     allow_http: bool,
+    proxy_url: &str,
     trusted_refresh_endpoint: F,
 ) -> Result<Option<String>>
 where
@@ -313,10 +349,8 @@ where
             "OAuth credential does not match the current trusted refresh endpoint; sign in again"
         );
     }
-    let client = reqwest::blocking::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
-        .context("build OAuth refresh client")?;
+    let client =
+        app_http_client_no_redirects(proxy_url, Some(20)).context("build OAuth refresh client")?;
     let response = client
         .post(&refresh.token_url)
         .header(reqwest::header::ACCEPT, "application/json")
@@ -627,6 +661,64 @@ mod tests {
             assert!(result.is_err(), "accepted HTTP {redirect_status} redirect");
             attacker_request.assert();
         }
+    }
+
+    #[test]
+    fn oauth_refresh_uses_configured_application_proxy() {
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+        use std::sync::mpsc;
+        use std::time::Duration;
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let (request_tx, request_rx) = mpsc::channel();
+        let proxy = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut buffer = [0_u8; 4096];
+            let read = stream.read(&mut buffer).unwrap();
+            request_tx
+                .send(String::from_utf8_lossy(&buffer[..read]).into_owned())
+                .unwrap();
+            let body = r#"{"access_token":"refreshed-token","expires_in":3600}"#;
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            )
+            .unwrap();
+        });
+        let endpoint = "http://127.0.0.1:9/github/token";
+        let store = MemoryCredentialStore::default();
+        save_oauth_credential_with_http_policy(
+            &store,
+            "oauth",
+            ProviderId::Github,
+            &OAuthCredential {
+                access_token: "expired-token".to_string(),
+                refresh_token: Some("refresh-token".to_string()),
+                expires_at: Some(now_seconds()),
+                token_url: endpoint.to_string(),
+                client_id: "github-client".to_string(),
+            },
+            true,
+        )
+        .unwrap();
+
+        let token = resolve_access_token_with_trusted_refresh_endpoint_and_proxy(
+            &store,
+            "oauth",
+            &CredentialUsage::official(ProviderId::Github),
+            Some(endpoint),
+            &format!("http://{address}"),
+        )
+        .unwrap();
+
+        assert_eq!(token.as_deref(), Some("refreshed-token"));
+        let received = request_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        proxy.join().unwrap();
+        assert!(received.starts_with("POST http://127.0.0.1:9/github/token HTTP/1.1"));
     }
 
     #[test]

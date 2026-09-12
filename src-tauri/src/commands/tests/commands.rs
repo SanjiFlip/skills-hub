@@ -23,7 +23,7 @@ fn make_store() -> (tempfile::TempDir, SkillStore) {
 }
 
 #[test]
-fn github_oauth_uses_saved_github_proxy_only_for_github() {
+fn device_sync_network_operations_share_the_saved_application_proxy() {
     let (_dir, store) = make_store();
     set_github_proxy_config_core(&store, true, 7897).unwrap();
 
@@ -31,8 +31,14 @@ fn github_oauth_uses_saved_github_proxy_only_for_github() {
         oauth_proxy_url(&store, ProviderId::Github).unwrap(),
         "http://127.0.0.1:7897"
     );
-    assert_eq!(oauth_proxy_url(&store, ProviderId::Gitlab).unwrap(), "");
-    assert_eq!(oauth_proxy_url(&store, ProviderId::Gitee).unwrap(), "");
+    assert_eq!(
+        oauth_proxy_url(&store, ProviderId::Gitlab).unwrap(),
+        "http://127.0.0.1:7897"
+    );
+    assert_eq!(
+        oauth_proxy_url(&store, ProviderId::Gitee).unwrap(),
+        "http://127.0.0.1:7897"
+    );
 }
 
 #[test]

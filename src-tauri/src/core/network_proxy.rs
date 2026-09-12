@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use git2::{FetchOptions, ProxyOptions, PushOptions};
 use reqwest::blocking::{Client, ClientBuilder};
 use std::net::{SocketAddr, TcpStream};
 use std::time::Duration;
@@ -85,6 +86,10 @@ pub fn github_http_client_no_redirects(
     proxy_url: &str,
     timeout_secs: Option<u64>,
 ) -> Result<Client> {
+    app_http_client_no_redirects(proxy_url, timeout_secs)
+}
+
+pub fn app_http_client_no_redirects(proxy_url: &str, timeout_secs: Option<u64>) -> Result<Client> {
     http_client_builder(proxy_url, timeout_secs)?
         .redirect(reqwest::redirect::Policy::none())
         .build()
@@ -92,7 +97,7 @@ pub fn github_http_client_no_redirects(
 }
 
 fn http_client_builder(proxy_url: &str, timeout_secs: Option<u64>) -> Result<ClientBuilder> {
-    let mut builder = ClientBuilder::new();
+    let mut builder = ClientBuilder::new().no_proxy();
     if let Some(secs) = timeout_secs {
         builder = builder.timeout(std::time::Duration::from_secs(secs));
     }
@@ -108,6 +113,27 @@ fn http_client_builder(proxy_url: &str, timeout_secs: Option<u64>) -> Result<Cli
 
 pub fn github_http_client(proxy_url: &str, timeout_secs: Option<u64>) -> Result<Client> {
     app_http_client(proxy_url, timeout_secs)
+}
+
+pub fn git_fetch_options<'a>(proxy_url: &str) -> FetchOptions<'a> {
+    let mut options = FetchOptions::new();
+    options.proxy_options(git_proxy_options(proxy_url));
+    options
+}
+
+pub fn git_push_options<'a>(proxy_url: &str) -> PushOptions<'a> {
+    let mut options = PushOptions::new();
+    options.proxy_options(git_proxy_options(proxy_url));
+    options
+}
+
+fn git_proxy_options(proxy_url: &str) -> ProxyOptions<'static> {
+    let mut options = ProxyOptions::new();
+    let proxy_url = proxy_url.trim();
+    if !proxy_url.is_empty() {
+        options.url(proxy_url);
+    }
+    options
 }
 
 pub fn normalize_proxy_url(proxy_url: &str) -> String {
@@ -148,7 +174,45 @@ fn local_tcp_port_is_open(host: &str, port: u16, timeout: Duration) -> bool {
 mod tests {
     use super::*;
     use crate::core::skill_store::SkillStore;
+    use std::collections::HashMap;
+    use std::ffi::OsString;
+    use std::io::{Read, Write};
     use std::net::TcpListener;
+    use std::sync::Mutex;
+
+    static PROXY_ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    struct RestoredEnvironment(HashMap<&'static str, Option<OsString>>);
+
+    impl RestoredEnvironment {
+        fn replace(values: &[(&'static str, Option<&str>)]) -> Self {
+            let previous = values
+                .iter()
+                .map(|(name, value)| {
+                    let previous = std::env::var_os(name);
+                    if let Some(value) = value {
+                        std::env::set_var(name, value);
+                    } else {
+                        std::env::remove_var(name);
+                    }
+                    (*name, previous)
+                })
+                .collect();
+            Self(previous)
+        }
+    }
+
+    impl Drop for RestoredEnvironment {
+        fn drop(&mut self) {
+            for (name, value) in self.0.drain() {
+                if let Some(value) = value {
+                    std::env::set_var(name, value);
+                } else {
+                    std::env::remove_var(name);
+                }
+            }
+        }
+    }
 
     #[test]
     fn empty_github_proxy_disables_proxy() {
@@ -160,6 +224,39 @@ mod tests {
 
         assert_eq!(saved, "");
         assert_eq!(get_github_proxy_url(&store).unwrap(), "");
+    }
+
+    #[test]
+    fn empty_application_proxy_ignores_inherited_proxy_environment() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = [0_u8; 1024];
+            let _ = stream.read(&mut request).unwrap();
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok")
+                .unwrap();
+        });
+        let client = {
+            let _lock = PROXY_ENV_LOCK.lock().unwrap();
+            let _environment = RestoredEnvironment::replace(&[
+                ("HTTP_PROXY", Some("http://127.0.0.1:9")),
+                ("HTTPS_PROXY", Some("http://127.0.0.1:9")),
+                ("ALL_PROXY", Some("http://127.0.0.1:9")),
+                ("NO_PROXY", Some("")),
+                ("http_proxy", Some("http://127.0.0.1:9")),
+                ("https_proxy", Some("http://127.0.0.1:9")),
+                ("all_proxy", Some("http://127.0.0.1:9")),
+                ("no_proxy", Some("")),
+            ]);
+            app_http_client("", Some(5)).unwrap()
+        };
+
+        let response = client.get(format!("http://{address}/health")).send();
+
+        assert_eq!(response.unwrap().text().unwrap(), "ok");
+        server.join().unwrap();
     }
 
     #[test]

@@ -23,8 +23,11 @@ use crate::core::central_repo::{
     validate_central_repo_path_change, CentralRepoMigrationItem,
 };
 use crate::core::content_hash::hash_dir;
+#[cfg(test)]
+use crate::core::device_sync::credentials::resolve_access_token;
 use crate::core::device_sync::credentials::{
-    resolve_access_token, save_personal_access_token, CredentialStore, SystemCredentialStore,
+    resolve_access_token_with_proxy, save_personal_access_token, CredentialStore,
+    SystemCredentialStore,
 };
 use crate::core::device_sync::oauth;
 use crate::core::device_sync::providers::provider;
@@ -84,12 +87,8 @@ const DEVICE_SYNC_PENDING_OAUTH_SETTING: &str = "device_sync_pending_oauth_v1";
 const DEVICE_SYNC_CREDENTIAL_CLEANUP_QUEUE_SETTING: &str =
     "device_sync_credential_cleanup_queue_v1";
 
-fn oauth_proxy_url(store: &SkillStore, provider_id: ProviderId) -> anyhow::Result<String> {
-    if provider_id == ProviderId::Github {
-        get_github_proxy_url_core(store)
-    } else {
-        Ok(String::new())
-    }
+fn oauth_proxy_url(store: &SkillStore, _provider_id: ProviderId) -> anyhow::Result<String> {
+    get_github_proxy_url_core(store)
 }
 
 fn format_anyhow_error(err: anyhow::Error) -> String {
@@ -2329,7 +2328,8 @@ pub fn save_device_sync_config(
         let usage = remote_usage
             .as_ref()
             .ok_or_else(|| "token authentication requires an HTTPS repository URL".to_string())?;
-        if resolve_access_token(&credentials, key, usage)
+        let proxy_url = get_github_proxy_url_core(&store).map_err(format_anyhow_error)?;
+        if resolve_access_token_with_proxy(&credentials, key, usage, &proxy_url)
             .map_err(format_anyhow_error)?
             .is_none()
         {
@@ -2490,13 +2490,18 @@ pub fn cancel_device_sync_oauth(flowId: String) {
 #[tauri::command]
 #[allow(non_snake_case)]
 pub async fn validate_device_sync_account(
+    store: State<'_, SkillStore>,
     providerId: ProviderId,
     token: String,
 ) -> Result<ProviderAccount, String> {
-    tauri::async_runtime::spawn_blocking(move || provider(providerId).validate_token(token.trim()))
-        .await
-        .map_err(|err| err.to_string())?
-        .map_err(format_anyhow_error)
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let proxy_url = get_github_proxy_url_core(&store)?;
+        provider(providerId, &proxy_url)?.validate_token(token.trim())
+    })
+    .await
+    .map_err(|err| err.to_string())?
+    .map_err(format_anyhow_error)
 }
 
 #[tauri::command]
@@ -2511,7 +2516,8 @@ pub async fn create_device_sync_repository(
     let store = store.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         let token = resolve_device_sync_token(&store, providerId, token, credentialKey)?;
-        let provider = provider(providerId);
+        let proxy_url = get_github_proxy_url_core(&store)?;
+        let provider = provider(providerId, &proxy_url)?;
         provider.validate_token(token.trim())?;
         provider.create_private_repository(token.trim(), &name)
     })
@@ -2531,7 +2537,8 @@ pub async fn list_device_sync_repositories(
     let store = store.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         let token = resolve_device_sync_token(&store, providerId, token, credentialKey)?;
-        provider(providerId).list_repositories(&token)
+        let proxy_url = get_github_proxy_url_core(&store)?;
+        provider(providerId, &proxy_url)?.list_repositories(&token)
     })
     .await
     .map_err(|err| err.to_string())?
@@ -3114,10 +3121,12 @@ fn resolve_device_sync_token(
                 .and_then(|config| config.credential_key)
         })
         .context("sign in or provide an access token first")?;
-    resolve_access_token(
+    let proxy_url = get_github_proxy_url_core(store)?;
+    resolve_access_token_with_proxy(
         &SystemCredentialStore,
         &key,
         &CredentialUsage::official(provider),
+        &proxy_url,
     )
     .context("read saved device sync authorization")?
     .context("saved authorization is unavailable; sign in again")

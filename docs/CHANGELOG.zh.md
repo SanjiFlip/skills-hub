@@ -21,7 +21,7 @@
 
 ### 修复
 - **Gitee 手动 Token 配置**：填写个人访问令牌后会显示仓库加载入口，并仅在用户主动加载时将该令牌传给平台 API；即使当前版本不支持 Gitee 浏览器授权，也能在首次同步前识别仓库可见性。仓库加载使用 Gitee 支持的 `visibility=all` 筛选，兼容其真实响应中 `clone_url` 为 null、HTTPS Git 地址位于 `html_url` 的数据结构，会自动匹配带或不带 `.git` 后缀的已填写仓库地址，并支持在空仓库尚无目标分支时完成首次同步。
-- **GitHub OAuth 复用代理**：GitHub 设备授权的设备码申请、Token 轮询和授权账号校验现在统一使用应用中配置的代理；GitLab 与 Gitee OAuth 不受 GitHub 代理设置影响。
+- **统一网络代理链路**：设备同步的 Git 克隆、拉取和推送，GitHub、GitLab 与 Gitee 平台接口，OAuth 授权及令牌刷新，系统 Git 和 libgit2 备用链路现在都使用应用内配置的代理。关闭应用代理时也会阻止进程环境或 Git 全局代理悄悄改变网络路径，并通过自动边界检查防止后续代码绕过统一网络模块。
 - **Windows Rust 构建兼容性**：修复仅在 MSVC 下出现的类型与 lint 错误，使 `cargo clippy --all-targets` 和 Rust 测试目标能够在 Windows 上完成编译。既有的 `STATUS_ENTRYPOINT_NOT_FOUND` 测试程序启动问题不在本次修复范围内（修复 [#142](https://github.com/qufei1993/skills-hub/issues/142)，[PR #143](https://github.com/qufei1993/skills-hub/pull/143)）。
 - **来源及工具异常状态一致**：来源更新错误不再被无关设备同步清除，各页面会刷新当前状态；工具副本异常不再导致中央库同步失败，本地原始来源缺失时仍可查看托管副本（[PR #136](https://github.com/qufei1993/skills-hub/pull/136)、[PR #138](https://github.com/qufei1993/skills-hub/pull/138)）。
 - **筛选安装范围准确**：未填写来源时禁用添加操作；从多 Skill Git 仓库或本地目录导入时，只安装当前搜索结果中可见且已勾选的项目（[PR #124](https://github.com/qufei1993/skills-hub/pull/124)、[PR #132](https://github.com/qufei1993/skills-hub/pull/132)）。

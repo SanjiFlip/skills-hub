@@ -201,7 +201,7 @@ cargo test
 - 什么是项目级同步？Skill 仍然只在中心仓库保存一份，但同步目标变为指定项目目录，例如 `<project>/.agents/skills`、`<project>/.claude/skills` 或其它工具对应的项目级 skills 路径。
 - 自定义工具目录是什么？如果某个内部工具或二次封装 Agent 使用自己的 skills 目录，可以在管理中心添加为自定义同步目标。
 - 自动更新会更新什么？自动更新会按配置更新 Git 和本地来源的 Skill，并把更新结果同步到对应工具目标。
-- 网络代理影响哪些请求？它会影响 GitHub API、精选 Skills、GitHub Contents 下载和 Git clone/fetch/update 流程。
+- 网络代理影响哪些请求？它是应用外部 HTTP、OAuth、应用更新和远端 Git 操作的统一入口，包括 GitHub、GitLab 与 Gitee 设备同步。
 - Cursor 为什么强制 Copy？Cursor 当前不支持软链（symlink/junction）形式的技能目录，因此同步到 Cursor 时会固定使用目录复制（copy）。
 - 为什么有时会变成 Copy？默认优先 symlink/junction，但在某些系统（尤其 Windows）可能因为权限/策略导致无法创建链接，会自动回退到目录复制。
 - `TARGET_EXISTS|...` 是什么意思？目标目录已存在且默认不覆盖（为了安全）。你需要先清理目标目录，或在“接管/覆盖”的明确流程里重试。
