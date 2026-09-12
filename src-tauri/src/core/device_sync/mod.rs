@@ -25,6 +25,7 @@ use self::types::{
     ConflictResolution, DeviceSyncConfig, DeviceSyncDevice, SyncChangeItem, SyncChangeSummary,
     SyncConflict, SyncRunResult, SyncStatus,
 };
+use crate::core::network_proxy::get_github_proxy_url;
 use crate::core::skill_store::SkillStore;
 
 pub struct DeviceSyncService<'a> {
@@ -185,11 +186,12 @@ impl<'a> DeviceSyncService<'a> {
     pub fn check(&self) -> Result<SyncChangeSummary> {
         let _guard = try_lock_device_sync()?;
         let config = self.require_config()?;
-        let token = self.read_token(&config)?;
+        let proxy_url = get_github_proxy_url(self.store)?;
+        let token = self.read_token(&config, &proxy_url)?;
         let repo_path = self.workspace_root.join("repository");
-        let repo = git_repo::open_or_clone(&repo_path, &config, token.as_deref())
+        let repo = git_repo::open_or_clone(&repo_path, &config, token.as_deref(), &proxy_url)
             .context(read_failure_context(&config))?;
-        let remote_oid = git_repo::fetch_and_checkout(&repo, &config, token.as_deref())
+        let remote_oid = git_repo::fetch_and_checkout(&repo, &config, token.as_deref(), &proxy_url)
             .context(read_failure_context(&config))?;
         self.ingest_discovered_devices(&repo, remote_oid)?;
         let remote = SyncManifest::read(&repo_path)?;
@@ -509,11 +511,12 @@ impl<'a> DeviceSyncService<'a> {
             !config.needs_public_upload_confirmation(),
             "DEVICE_SYNC_PUBLIC_UPLOAD_CONFIRMATION"
         );
-        let token = self.read_token(&config)?;
+        let proxy_url = get_github_proxy_url(self.store)?;
+        let token = self.read_token(&config, &proxy_url)?;
         let repo_path = self.workspace_root.join("repository");
-        let repo = git_repo::open_or_clone(&repo_path, &config, token.as_deref())
+        let repo = git_repo::open_or_clone(&repo_path, &config, token.as_deref(), &proxy_url)
             .context(read_failure_context(&config))?;
-        let parent = git_repo::fetch_and_checkout(&repo, &config, token.as_deref())
+        let parent = git_repo::fetch_and_checkout(&repo, &config, token.as_deref(), &proxy_url)
             .context(read_failure_context(&config))?;
         let mut registry = device_registry::DeviceRegistry::read_at(&repo, parent)?;
         self.ingest_discovered_devices(&repo, parent)?;
@@ -573,9 +576,9 @@ impl<'a> DeviceSyncService<'a> {
             let write_token = if token.is_some() {
                 token
             } else {
-                self.token(&config)?
+                self.token(&config, &proxy_url)?
             };
-            git_repo::push(&repo, &config, write_token.as_deref(), oid)?;
+            git_repo::push(&repo, &config, write_token.as_deref(), oid, &proxy_url)?;
             git_repo::update_remote_head(&repo, &config, oid)?;
             Some(oid)
         } else {
@@ -660,7 +663,7 @@ impl<'a> DeviceSyncService<'a> {
         Ok(config)
     }
 
-    fn token(&self, config: &DeviceSyncConfig) -> Result<Option<String>> {
+    fn token(&self, config: &DeviceSyncConfig, proxy_url: &str) -> Result<Option<String>> {
         if !config.uses_https() {
             return Ok(None);
         }
@@ -668,13 +671,18 @@ impl<'a> DeviceSyncService<'a> {
             Some(key) => {
                 let usage =
                     types::CredentialUsage::from_https_remote(config.provider, &config.remote_url)?;
-                credentials::resolve_access_token(self.credentials, key, &usage)
+                credentials::resolve_access_token_with_proxy(
+                    self.credentials,
+                    key,
+                    &usage,
+                    proxy_url,
+                )
             }
             None => Ok(None),
         }
     }
 
-    fn read_token(&self, config: &DeviceSyncConfig) -> Result<Option<String>> {
+    fn read_token(&self, config: &DeviceSyncConfig, proxy_url: &str) -> Result<Option<String>> {
         if !config.uses_https() {
             return Ok(None);
         }
@@ -682,7 +690,7 @@ impl<'a> DeviceSyncService<'a> {
             types::RepositoryVisibility::Public => Ok(None),
             types::RepositoryVisibility::Unknown => bail!("DEVICE_SYNC_VISIBILITY_UNKNOWN"),
             types::RepositoryVisibility::Private | types::RepositoryVisibility::Internal => self
-                .token(config)?
+                .token(config, proxy_url)?
                 .map(Some)
                 .context("DEVICE_SYNC_READ_CREDENTIAL_REQUIRED"),
         }
@@ -1380,21 +1388,23 @@ mod tests {
             visibility: RepositoryVisibility::Public,
             ..Default::default()
         };
-        assert_eq!(service.read_token(&config).unwrap(), None);
-        assert!(format!("{:#}", service.token(&config).unwrap_err())
+        assert_eq!(service.read_token(&config, "").unwrap(), None);
+        assert!(format!("{:#}", service.token(&config, "").unwrap_err())
             .contains("credential read attempted"));
         config.visibility = RepositoryVisibility::Private;
-        assert!(format!("{:#}", service.read_token(&config).unwrap_err())
-            .contains("credential read attempted"));
+        assert!(
+            format!("{:#}", service.read_token(&config, "").unwrap_err())
+                .contains("credential read attempted")
+        );
         config.visibility = RepositoryVisibility::Unknown;
         assert!(service
-            .read_token(&config)
+            .read_token(&config, "")
             .unwrap_err()
             .to_string()
             .contains("DEVICE_SYNC_VISIBILITY_UNKNOWN"));
         config.remote_url = "git@github.com:example/sync.git".into();
-        assert_eq!(service.read_token(&config).unwrap(), None);
-        assert_eq!(service.token(&config).unwrap(), None);
+        assert_eq!(service.read_token(&config, "").unwrap(), None);
+        assert_eq!(service.token(&config, "").unwrap(), None);
     }
 
     #[test]
@@ -1451,7 +1461,7 @@ mod tests {
             remote_url: bare.to_string_lossy().to_string(),
             ..DeviceSyncConfig::default()
         };
-        git_repo::push(&seed, &config, None, first).unwrap();
+        git_repo::push(&seed, &config, None, first, "").unwrap();
         (bare, config)
     }
 
@@ -2042,7 +2052,7 @@ mod tests {
         )
         .unwrap()
         .unwrap();
-        git_repo::push(&seed, &config, None, old).unwrap();
+        git_repo::push(&seed, &config, None, old, "").unwrap();
         let credentials = MemoryCredentialStore::default();
         let store = make_store(root.path(), "new-client", &config);
         store
@@ -2057,7 +2067,7 @@ mod tests {
         service.check().unwrap();
         assert_eq!(service.devices().unwrap()[0].name, "Old Mac");
         service.sync().unwrap();
-        let parent = git_repo::fetch_and_checkout(&seed, &config, None).unwrap();
+        let parent = git_repo::fetch_and_checkout(&seed, &config, None, "").unwrap();
         let later = git_repo::commit_all_allow_empty(
             &seed,
             "Legacy sync\n\nSkills-Hub-Device-ID: later\nSkills-Hub-Device-Name: Old PC",
@@ -2065,7 +2075,7 @@ mod tests {
         )
         .unwrap()
         .unwrap();
-        git_repo::push(&seed, &config, None, later).unwrap();
+        git_repo::push(&seed, &config, None, later, "").unwrap();
         service.check().unwrap();
         assert_eq!(service.devices().unwrap().len(), 3);
         service.sync().unwrap();
@@ -2117,14 +2127,14 @@ mod tests {
         let other_head = git_repo::commit_all(&other, "Other writer", parent)
             .unwrap()
             .unwrap();
-        git_repo::push(&other, &config, None, other_head).unwrap();
+        git_repo::push(&other, &config, None, other_head, "").unwrap();
         let mut registry = device_registry::DeviceRegistry::read_at(&stale, parent).unwrap();
         registry.record(&service.local_device_identity().unwrap());
         registry.write(&workspace.join("repository")).unwrap();
         let stale_head = git_repo::commit_all(&stale, "Stale writer", parent)
             .unwrap()
             .unwrap();
-        assert!(git_repo::push(&stale, &config, None, stale_head).is_err());
+        assert!(git_repo::push(&stale, &config, None, stale_head, "").is_err());
         service.sync().unwrap();
         let records = service.devices().unwrap();
         assert_eq!(records.len(), 2);
@@ -2147,7 +2157,7 @@ mod tests {
         let oid = git_repo::commit_all(&seed, "invalid registry", parent)
             .unwrap()
             .unwrap();
-        git_repo::push(&seed, &config, None, oid).unwrap();
+        git_repo::push(&seed, &config, None, oid, "").unwrap();
         let credentials = MemoryCredentialStore::default();
         let store = make_store(root.path(), "invalid-registry", &config);
         let service = DeviceSyncService::new(

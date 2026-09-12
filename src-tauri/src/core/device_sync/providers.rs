@@ -5,7 +5,7 @@ use serde::Deserialize;
 use serde_json::json;
 
 use super::types::{ProviderAccount, ProviderId, RemoteRepository};
-use crate::core::network_proxy::{app_http_client, github_http_client_no_redirects};
+use crate::core::network_proxy::{app_http_client, app_http_client_no_redirects};
 
 pub trait GitProvider: Send + Sync {
     fn validate_token(&self, token: &str) -> Result<ProviderAccount>;
@@ -13,20 +13,30 @@ pub trait GitProvider: Send + Sync {
     fn create_private_repository(&self, token: &str, name: &str) -> Result<RemoteRepository>;
 }
 
-pub fn provider(id: ProviderId) -> Box<dyn GitProvider> {
-    match id {
-        ProviderId::Github => Box::new(ApiProvider::github()),
-        ProviderId::Gitlab => Box::new(ApiProvider::gitlab()),
-        ProviderId::Gitee => Box::new(ApiProvider::gitee()),
-    }
+pub fn provider(id: ProviderId, proxy_url: &str) -> Result<Box<dyn GitProvider>> {
+    Ok(Box::new(ApiProvider::new_with_proxy(
+        id,
+        provider_base_url(id),
+        proxy_url,
+        true,
+    )?))
 }
 
-pub fn github_oauth_provider(proxy_url: &str) -> Result<Box<dyn GitProvider>> {
+pub fn oauth_provider(id: ProviderId, proxy_url: &str) -> Result<Box<dyn GitProvider>> {
     Ok(Box::new(ApiProvider::new_with_proxy(
-        ProviderId::Github,
-        "https://api.github.com",
+        id,
+        provider_base_url(id),
         proxy_url,
+        false,
     )?))
+}
+
+fn provider_base_url(id: ProviderId) -> &'static str {
+    match id {
+        ProviderId::Github => "https://api.github.com",
+        ProviderId::Gitlab => "https://gitlab.com/api/v4",
+        ProviderId::Gitee => "https://gitee.com/api/v5",
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -37,18 +47,6 @@ pub struct ApiProvider {
 }
 
 impl ApiProvider {
-    pub fn github() -> Self {
-        Self::new(ProviderId::Github, "https://api.github.com")
-    }
-
-    pub fn gitlab() -> Self {
-        Self::new(ProviderId::Gitlab, "https://gitlab.com/api/v4")
-    }
-
-    pub fn gitee() -> Self {
-        Self::new(ProviderId::Gitee, "https://gitee.com/api/v5")
-    }
-
     #[cfg(test)]
     pub fn with_base_url(id: ProviderId, base_url: impl Into<String>) -> Self {
         Self::new(id, &base_url.into())
@@ -60,9 +58,10 @@ impl ApiProvider {
         base_url: impl Into<String>,
         proxy_url: &str,
     ) -> Result<Self> {
-        Self::new_with_proxy(id, &base_url.into(), proxy_url)
+        Self::new_with_proxy(id, &base_url.into(), proxy_url, false)
     }
 
+    #[cfg(test)]
     fn new(id: ProviderId, base_url: &str) -> Self {
         Self {
             id,
@@ -71,11 +70,21 @@ impl ApiProvider {
         }
     }
 
-    fn new_with_proxy(id: ProviderId, base_url: &str, proxy_url: &str) -> Result<Self> {
+    fn new_with_proxy(
+        id: ProviderId,
+        base_url: &str,
+        proxy_url: &str,
+        follow_redirects: bool,
+    ) -> Result<Self> {
+        let client = if follow_redirects {
+            app_http_client(proxy_url, Some(20))?
+        } else {
+            app_http_client_no_redirects(proxy_url, Some(20))?
+        };
         Ok(Self {
             id,
             base_url: base_url.trim_end_matches('/').to_string(),
-            client: github_http_client_no_redirects(proxy_url, Some(20))?,
+            client,
         })
     }
 
@@ -293,7 +302,7 @@ mod tests {
             request_tx
                 .send(String::from_utf8_lossy(&buffer[..read]).into_owned())
                 .unwrap();
-            let body = r#"{"login":"may","name":"May"}"#;
+            let body = r#"{"login":"may","username":"may","name":"May"}"#;
             write!(
                 stream,
                 "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -335,21 +344,27 @@ mod tests {
     }
 
     #[test]
-    fn github_account_validation_uses_configured_proxy() {
-        let (proxy_url, request, proxy) = account_proxy_once();
-        let provider = ApiProvider::with_base_url_and_proxy(
-            ProviderId::Github,
-            "http://127.0.0.1:9",
-            &proxy_url,
-        )
-        .unwrap();
+    fn provider_constructor_validates_the_application_proxy_for_every_provider() {
+        for provider_id in [ProviderId::Github, ProviderId::Gitlab, ProviderId::Gitee] {
+            assert!(provider(provider_id, "://invalid-proxy").is_err());
+        }
+    }
 
-        let account = provider.validate_token("token").unwrap();
+    #[test]
+    fn every_provider_account_validation_uses_configured_proxy() {
+        for provider_id in [ProviderId::Github, ProviderId::Gitlab, ProviderId::Gitee] {
+            let (proxy_url, request, proxy) = account_proxy_once();
+            let provider =
+                ApiProvider::with_base_url_and_proxy(provider_id, "http://127.0.0.1:9", &proxy_url)
+                    .unwrap();
 
-        let received = request.recv_timeout(Duration::from_secs(5)).unwrap();
-        proxy.join().unwrap();
-        assert_eq!(account.login, "may");
-        assert!(received.starts_with("GET http://127.0.0.1:9/user HTTP/1.1"));
+            let account = provider.validate_token("token").unwrap();
+
+            let received = request.recv_timeout(Duration::from_secs(5)).unwrap();
+            proxy.join().unwrap();
+            assert_eq!(account.login, "may");
+            assert!(received.starts_with("GET http://127.0.0.1:9/user HTTP/1.1"));
+        }
     }
 
     #[test]

@@ -3,16 +3,18 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 use git2::{
-    build::RepoBuilder, Cred, FetchOptions, IndexAddOption, Oid, ProxyOptions, PushOptions,
-    RemoteCallbacks, RemoteRedirect, Repository, ResetType, Signature,
+    build::RepoBuilder, Cred, IndexAddOption, Oid, RemoteCallbacks, RemoteRedirect, Repository,
+    ResetType, Signature,
 };
 
 use super::types::{CredentialUsage, DeviceSyncConfig, DeviceSyncDevice};
+use crate::core::network_proxy::{git_fetch_options, git_push_options};
 
 pub fn open_or_clone(
     path: &Path,
     config: &DeviceSyncConfig,
     token: Option<&str>,
+    proxy_url: &str,
 ) -> Result<Repository> {
     if path.join(".git").exists() {
         let repo = Repository::open(path).context("open device sync repository")?;
@@ -22,17 +24,16 @@ pub fn open_or_clone(
         } else {
             drop(repo);
             std::fs::remove_dir_all(path).context("replace device sync workspace")?;
-            open_or_clone(path, config, token)
+            open_or_clone(path, config, token, proxy_url)
         }
     } else {
         if path.exists() {
             std::fs::remove_dir_all(path).context("reset incomplete device sync workspace")?;
         }
         std::fs::create_dir_all(path.parent().context("sync workspace has no parent")?)?;
-        let mut fetch = FetchOptions::new();
+        let mut fetch = git_fetch_options(proxy_url);
         fetch.remote_callbacks(callbacks(config, token));
         fetch.follow_redirects(remote_redirect_policy(token));
-        apply_fetch_proxy(&mut fetch, &config.remote_url);
         let mut builder = RepoBuilder::new();
         builder.fetch_options(fetch).branch(&config.branch);
         builder
@@ -53,12 +54,12 @@ pub fn fetch_and_checkout(
     repo: &Repository,
     config: &DeviceSyncConfig,
     token: Option<&str>,
+    proxy_url: &str,
 ) -> Result<Option<Oid>> {
     let mut remote = repo.find_remote("origin").context("find sync origin")?;
-    let mut options = FetchOptions::new();
+    let mut options = git_fetch_options(proxy_url);
     options.remote_callbacks(callbacks(config, token));
     options.follow_redirects(remote_redirect_policy(token));
-    apply_fetch_proxy(&mut options, &config.remote_url);
     let refspec = format!(
         "refs/heads/{}:refs/remotes/origin/{}",
         config.branch, config.branch
@@ -128,12 +129,13 @@ pub fn push(
     config: &DeviceSyncConfig,
     token: Option<&str>,
     oid: Oid,
+    proxy_url: &str,
 ) -> Result<()> {
     let local_ref = format!("refs/heads/{}", config.branch);
     repo.reference(&local_ref, oid, true, "device sync")?;
     repo.set_head(&local_ref)?;
     let mut remote = repo.find_remote("origin")?;
-    let mut options = PushOptions::new();
+    let mut options = git_push_options(proxy_url);
     let mut push_callbacks = callbacks(config, token);
     push_callbacks.push_update_reference(|_, status| {
         if status.is_some() {
@@ -146,9 +148,6 @@ pub fn push(
     });
     options.remote_callbacks(push_callbacks);
     options.follow_redirects(remote_redirect_policy(token));
-    if let Some(proxy) = proxy_options(&config.remote_url) {
-        options.proxy_options(proxy);
-    }
     let refspec = format!("{}:{}", local_ref, local_ref);
     remote
         .push(&[&refspec], Some(&mut options))
@@ -360,74 +359,7 @@ fn credential_for_callback(
     Cred::default()
 }
 
-fn apply_fetch_proxy(options: &mut FetchOptions<'_>, remote_url: &str) {
-    if let Some(proxy) = proxy_options(remote_url) {
-        options.proxy_options(proxy);
-    }
-}
-
-fn proxy_options(remote_url: &str) -> Option<ProxyOptions<'static>> {
-    proxy_options_with(remote_url, |name| std::env::var(name).ok())
-}
-
-fn proxy_options_with(
-    remote_url: &str,
-    environment: impl Fn(&str) -> Option<String>,
-) -> Option<ProxyOptions<'static>> {
-    if should_bypass_proxy(
-        remote_url,
-        environment("NO_PROXY").or_else(|| environment("no_proxy")),
-    ) {
-        return None;
-    }
-
-    let mut options = ProxyOptions::new();
-    if let Some(url) = environment_proxy_url(remote_url, &environment) {
-        options.url(&url);
-    } else {
-        options.auto();
-    }
-    Some(options)
-}
-
-fn environment_proxy_url(
-    remote_url: &str,
-    environment: &impl Fn(&str) -> Option<String>,
-) -> Option<String> {
-    let names: &[&str] = if remote_url.starts_with("https://") {
-        &["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy"]
-    } else if remote_url.starts_with("http://") {
-        &["HTTP_PROXY", "http_proxy"]
-    } else {
-        &[]
-    };
-    names
-        .iter()
-        .find_map(|name| environment(name))
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
-}
-
-fn should_bypass_proxy(remote_url: &str, no_proxy: Option<String>) -> bool {
-    let Some(host) = remote_host(remote_url) else {
-        return false;
-    };
-    no_proxy.is_some_and(|value| {
-        value.split(',').any(|entry| {
-            let entry = entry.trim();
-            if entry == "*" {
-                return true;
-            }
-            let entry = entry
-                .trim_start_matches('.')
-                .split(':')
-                .next()
-                .unwrap_or_default();
-            !entry.is_empty() && (host == entry || host.ends_with(&format!(".{entry}")))
-        })
-    })
-}
-
+#[cfg(test)]
 fn remote_host(remote_url: &str) -> Option<&str> {
     let (_, remainder) = remote_url.split_once("://")?;
     let authority = remainder.split('/').next()?;
@@ -441,8 +373,11 @@ fn remote_host(remote_url: &str) -> Option<&str> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
     use std::fs;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::sync::mpsc;
+    use std::time::Duration;
 
     fn commit_file(repo: &Repository, path: &str, content: &str, parent: Option<Oid>) -> Oid {
         let workdir = repo.workdir().unwrap();
@@ -471,11 +406,11 @@ mod tests {
             remote_url: bare_path.to_string_lossy().to_string(),
             ..DeviceSyncConfig::default()
         };
-        push(&seed, &config, None, first).unwrap();
+        push(&seed, &config, None, first, "").unwrap();
 
         let checkout_path = temp.path().join("checkout");
-        let checkout = open_or_clone(&checkout_path, &config, None).unwrap();
-        let parent = fetch_and_checkout(&checkout, &config, None)
+        let checkout = open_or_clone(&checkout_path, &config, None, "").unwrap();
+        let parent = fetch_and_checkout(&checkout, &config, None, "")
             .unwrap()
             .unwrap();
         let second = commit_file(
@@ -484,7 +419,7 @@ mod tests {
             "# One",
             Some(parent),
         );
-        push(&checkout, &config, None, second).unwrap();
+        push(&checkout, &config, None, second, "").unwrap();
 
         let remote = Repository::open_bare(&bare_path).unwrap();
         assert_eq!(remote.refname_to_id("refs/heads/main").unwrap(), second);
@@ -501,20 +436,20 @@ mod tests {
         let seed = Repository::init(temp.path().join("seed")).unwrap();
         seed.remote("origin", &config.remote_url).unwrap();
         let base = commit_file(&seed, "shared.md", "base", None);
-        push(&seed, &config, None, base).unwrap();
-        let other = open_or_clone(&temp.path().join("other"), &config, None).unwrap();
-        let stale_base = fetch_and_checkout(&other, &config, None).unwrap();
+        push(&seed, &config, None, base, "").unwrap();
+        let other = open_or_clone(&temp.path().join("other"), &config, None, "").unwrap();
+        let stale_base = fetch_and_checkout(&other, &config, None, "").unwrap();
         let winning = commit_file(&seed, "shared.md", "remote edit", Some(base));
-        push(&seed, &config, None, winning).unwrap();
+        push(&seed, &config, None, winning, "").unwrap();
         let losing = commit_file(&other, "shared.md", "local edit", stale_base);
-        let error = push(&other, &config, None, losing).unwrap_err();
+        let error = push(&other, &config, None, losing, "").unwrap_err();
         assert_eq!(
             error.downcast_ref::<git2::Error>().unwrap().code(),
             git2::ErrorCode::NotFastForward
         );
         assert_eq!(bare.refname_to_id("refs/heads/main").unwrap(), winning);
         assert_eq!(
-            fetch_and_checkout(&other, &config, None).unwrap(),
+            fetch_and_checkout(&other, &config, None, "").unwrap(),
             Some(winning)
         );
         assert_eq!(
@@ -524,30 +459,36 @@ mod tests {
     }
 
     #[test]
-    fn selects_https_proxy_from_environment() {
-        let environment = HashMap::from([
-            ("HTTPS_PROXY", "http://127.0.0.1:7890".to_string()),
-            ("HTTP_PROXY", "http://fallback:8080".to_string()),
-        ]);
+    fn clone_uses_the_explicit_application_proxy() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let (request_tx, request_rx) = mpsc::channel();
+        let proxy = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(5)))
+                .unwrap();
+            let mut buffer = [0_u8; 4096];
+            let read = stream.read(&mut buffer).unwrap();
+            request_tx
+                .send(String::from_utf8_lossy(&buffer[..read]).into_owned())
+                .unwrap();
+            stream
+                .write_all(b"HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\n\r\n")
+                .unwrap();
+        });
+        let config = DeviceSyncConfig {
+            remote_url: "https://127.0.0.1:9/example/repo.git".to_string(),
+            ..DeviceSyncConfig::default()
+        };
+        let destination = tempfile::tempdir().unwrap().path().join("clone");
 
-        assert_eq!(
-            environment_proxy_url("https://github.com/example/repo.git", &|name| {
-                environment.get(name).cloned()
-            }),
-            Some("http://127.0.0.1:7890".to_string())
-        );
-    }
+        let result = open_or_clone(&destination, &config, None, &format!("http://{address}"));
 
-    #[test]
-    fn no_proxy_bypasses_proxy_for_host_and_subdomains() {
-        assert!(should_bypass_proxy(
-            "https://github.com/example/repo.git",
-            Some("localhost,.github.com".to_string())
-        ));
-        assert!(!should_bypass_proxy(
-            "https://gitlab.com/example/repo.git",
-            Some("localhost,.github.com".to_string())
-        ));
+        assert!(result.is_err());
+        let request = request_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        proxy.join().unwrap();
+        assert!(request.starts_with("CONNECT 127.0.0.1:9 HTTP/1.1"));
     }
 
     #[test]

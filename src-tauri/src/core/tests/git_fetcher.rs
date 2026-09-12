@@ -1,7 +1,11 @@
 use std::fs;
+use std::io::{Read, Write};
+use std::net::TcpListener;
+use std::sync::mpsc;
+use std::time::Duration;
 
 use super::git_cmd;
-use crate::core::git_fetcher::{clone_or_pull, clone_or_pull_sparse};
+use crate::core::git_fetcher::{clone_or_pull, clone_or_pull_sparse, clone_or_pull_via_libgit2};
 
 fn commit_file(repo: &git2::Repository, path: &str, content: &[u8], msg: &str) -> git2::Oid {
     let workdir = repo.workdir().expect("workdir");
@@ -106,4 +110,64 @@ fn git_command_injects_configured_proxy() {
             .map(|value| value.to_string_lossy().to_string()),
         Some("http://127.0.0.1:7890".to_string())
     );
+}
+
+#[test]
+fn git_command_clears_inherited_proxy_when_application_proxy_is_disabled() {
+    let cmd = git_cmd(None);
+    let args = cmd
+        .get_args()
+        .map(|arg| arg.to_string_lossy().to_string())
+        .collect::<Vec<_>>();
+
+    assert!(args.contains(&"http.proxy=".to_string()));
+    assert!(args.contains(&"https.proxy=".to_string()));
+    for name in [
+        "http_proxy",
+        "https_proxy",
+        "all_proxy",
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+    ] {
+        assert!(
+            cmd.get_envs()
+                .any(|(key, value)| key == name && value.is_none()),
+            "{name} should be removed"
+        );
+    }
+}
+
+#[test]
+fn libgit2_fallback_uses_the_explicit_application_proxy() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let (request_tx, request_rx) = mpsc::channel();
+    let proxy = std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .unwrap();
+        let mut buffer = [0_u8; 4096];
+        let read = stream.read(&mut buffer).unwrap();
+        request_tx
+            .send(String::from_utf8_lossy(&buffer[..read]).into_owned())
+            .unwrap();
+        stream
+            .write_all(b"HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\n\r\n")
+            .unwrap();
+    });
+    let destination = tempfile::tempdir().unwrap().path().join("clone");
+
+    let result = clone_or_pull_via_libgit2(
+        "https://127.0.0.1:9/example/repo.git",
+        &destination,
+        None,
+        &format!("http://{address}"),
+    );
+
+    assert!(result.is_err());
+    let request = request_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+    proxy.join().unwrap();
+    assert!(request.starts_with("CONNECT 127.0.0.1:9 HTTP/1.1"));
 }

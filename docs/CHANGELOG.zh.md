@@ -20,7 +20,7 @@
 - **本地桌面 OAuth 配置**：`npm run tauri:dev` 和本地 `npm run tauri:build*` 命令现在会同时校验并注入 `SKILLS_HUB_GITHUB_CLIENT_ID` 与 `SKILLS_HUB_GITLAB_CLIENT_ID`；每个字段优先使用进程环境中的值，否则仅从仓库根目录 `.env` 或显式配置文件读取这两个白名单字段。已配置的 GitLab 浏览器授权因此可在开发版和安装版中使用。任一公开 Client ID 缺失或格式不合法时会在编译前停止，且不会导入 Client Secret、用户 Token 或其他字段。
 
 ### 修复
-- **GitHub OAuth 复用代理**：GitHub 设备授权的设备码申请、Token 轮询和授权账号校验现在统一使用应用中配置的代理；GitLab 与 Gitee OAuth 不受 GitHub 代理设置影响。
+- **统一网络代理链路**：设备同步的 Git 克隆、拉取和推送，GitHub、GitLab 与 Gitee 平台接口，OAuth 授权及令牌刷新，系统 Git 和 libgit2 备用链路现在都使用应用内配置的代理。关闭应用代理时也会阻止进程环境或 Git 全局代理悄悄改变网络路径，并通过自动边界检查防止后续代码绕过统一网络模块。
 - **Windows Rust 构建兼容性**：修复仅在 MSVC 下出现的类型与 lint 错误，使 `cargo clippy --all-targets` 和 Rust 测试目标能够在 Windows 上完成编译。既有的 `STATUS_ENTRYPOINT_NOT_FOUND` 测试程序启动问题不在本次修复范围内（修复 [#142](https://github.com/qufei1993/skills-hub/issues/142)，[PR #143](https://github.com/qufei1993/skills-hub/pull/143)）。
 - **来源及工具异常状态一致**：来源更新错误不再被无关设备同步清除，各页面会刷新当前状态；工具副本异常不再导致中央库同步失败，本地原始来源缺失时仍可查看托管副本（[PR #136](https://github.com/qufei1993/skills-hub/pull/136)、[PR #138](https://github.com/qufei1993/skills-hub/pull/138)）。
 - **筛选安装范围准确**：未填写来源时禁用添加操作；从多 Skill Git 仓库或本地目录导入时，只安装当前搜索结果中可见且已勾选的项目（[PR #124](https://github.com/qufei1993/skills-hub/pull/124)、[PR #132](https://github.com/qufei1993/skills-hub/pull/132)）。

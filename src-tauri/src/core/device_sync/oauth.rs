@@ -11,12 +11,12 @@ use super::credentials::{
     save_oauth_credential, save_oauth_credential_with_http_policy, CredentialStore,
     OAuthCredential, GITHUB_TOKEN_URL, GITLAB_TOKEN_URL,
 };
-use super::providers::{github_oauth_provider, provider};
+use super::providers::oauth_provider;
 use super::types::{
     OAuthPollResult, OAuthPollStatus, OAuthProviderAvailability, OAuthStartResult, ProviderAccount,
     ProviderId,
 };
-use crate::core::network_proxy::github_http_client_no_redirects;
+use crate::core::network_proxy::app_http_client_no_redirects;
 
 const GITHUB_DEVICE_URL: &str = "https://github.com/login/device/code";
 const GITLAB_DEVICE_URL: &str = "https://gitlab.com/oauth/authorize_device";
@@ -117,13 +117,7 @@ pub fn poll(
         credentials,
         false,
         proxy_url,
-        |provider_id, token| {
-            if provider_id == ProviderId::Github {
-                github_oauth_provider(proxy_url)?.validate_token(token)
-            } else {
-                provider(provider_id).validate_token(token)
-            }
-        },
+        |provider_id, token| oauth_provider(provider_id, proxy_url)?.validate_token(token),
     )
 }
 
@@ -146,7 +140,7 @@ fn start_with_endpoints_and_proxy(
     allow_http: bool,
     proxy_url: &str,
 ) -> Result<OAuthStartResult> {
-    let client = oauth_http_client(proxy_for_provider(provider_id, proxy_url))?;
+    let client = oauth_http_client(proxy_url)?;
     let (client_id, response, token_url, relay) = match provider_id {
         ProviderId::Github => {
             let client_id = endpoints
@@ -269,7 +263,7 @@ where
         .get(flow_id)
         .cloned()
         .context("OAuth authorization session expired; start again")?;
-    let client = oauth_http_client(proxy_for_provider(flow.provider, proxy_url))?;
+    let client = oauth_http_client(proxy_url)?;
     if now >= flow.expires_at {
         remove_flow_if_current(flow_id, flow.claim_id);
         bail!("OAuth authorization session expired; start again");
@@ -382,15 +376,7 @@ fn remove_flow_if_current(flow_id: &str, claim_id: Uuid) {
 }
 
 fn oauth_http_client(proxy_url: &str) -> Result<Client> {
-    github_http_client_no_redirects(proxy_url, Some(20)).context("build OAuth HTTP client")
-}
-
-fn proxy_for_provider(provider_id: ProviderId, github_proxy_url: &str) -> &str {
-    if provider_id == ProviderId::Github {
-        github_proxy_url
-    } else {
-        ""
-    }
+    app_http_client_no_redirects(proxy_url, Some(20)).context("build OAuth HTTP client")
 }
 
 fn pending(provider: ProviderId, interval_seconds: u64) -> OAuthPollResult {
@@ -707,12 +693,16 @@ mod tests {
     }
 
     fn insert_pollable_test_flow(token_url: String) -> String {
+        insert_pollable_test_flow_for_provider(ProviderId::Github, token_url)
+    }
+
+    fn insert_pollable_test_flow_for_provider(provider: ProviderId, token_url: String) -> String {
         let flow_id = Uuid::new_v4().to_string();
         flows().lock().unwrap().insert(
             flow_id.clone(),
             PendingFlow {
                 claim_id: Uuid::new_v4(),
-                provider: ProviderId::Github,
+                provider,
                 device_code: "device".to_string(),
                 token_url,
                 client_id: "client".to_string(),
@@ -876,6 +866,30 @@ mod tests {
     }
 
     #[test]
+    fn gitlab_device_authorization_uses_configured_application_proxy() {
+        let body = r#"{"device_code":"device","user_code":"EFGH","verification_uri":"http://127.0.0.1/verify","expires_in":900,"interval":3}"#;
+        let (proxy_url, request, proxy) = responding_proxy_once(body);
+        let configured = OAuthEndpoints {
+            github_client_id: None,
+            github_device_url: String::new(),
+            github_token_url: String::new(),
+            gitlab_client_id: Some("gitlab-client".to_string()),
+            gitlab_device_url: "http://127.0.0.1:9/gitlab/device".to_string(),
+            gitlab_token_url: "http://127.0.0.1:9/gitlab/token".to_string(),
+            gitee_relay_url: None,
+        };
+
+        let flow =
+            start_with_endpoints_and_proxy(ProviderId::Gitlab, &configured, true, &proxy_url)
+                .unwrap();
+
+        let received = request.recv_timeout(Duration::from_secs(5)).unwrap();
+        proxy.join().unwrap();
+        cancel(&flow.flow_id);
+        assert!(received.starts_with("POST http://127.0.0.1:9/gitlab/device HTTP/1.1"));
+    }
+
+    #[test]
     fn pending_authorization_remains_pending() {
         let mut server = mockito::Server::new();
         server
@@ -905,35 +919,28 @@ mod tests {
     }
 
     #[test]
-    fn gitlab_authorization_ignores_github_proxy() {
-        let mut server = mockito::Server::new();
-        server
-            .mock("POST", "/gitlab/device")
-            .with_status(200)
-            .with_body(format!(
-                r#"{{"device_code":"device","user_code":"EFGH","verification_uri":"{}/verify","expires_in":900,"interval":3}}"#,
-                server.url()
-            ))
-            .create();
-        let token_request = server
-            .mock("POST", "/gitlab/token")
-            .with_status(400)
-            .with_body(r#"{"error":"authorization_pending"}"#)
-            .create();
-        let flow = start_with_endpoints(ProviderId::Gitlab, &endpoints(&server), true).unwrap();
+    fn gitlab_token_poll_uses_configured_application_proxy() {
+        let (proxy_url, request, proxy) =
+            responding_proxy_once(r#"{"error":"authorization_pending"}"#);
+        let flow_id = insert_pollable_test_flow_for_provider(
+            ProviderId::Gitlab,
+            "http://127.0.0.1:9/gitlab/token".to_string(),
+        );
 
         let result = poll_flow_with_proxy(
-            &flow.flow_id,
+            &flow_id,
             &MemoryCredentialStore::default(),
             true,
-            "http://127.0.0.1:9",
+            &proxy_url,
             |_, _| unreachable!(),
         )
         .unwrap();
 
         assert_eq!(result.status, OAuthPollStatus::Pending);
-        token_request.assert();
-        cancel(&flow.flow_id);
+        let received = request.recv_timeout(Duration::from_secs(5)).unwrap();
+        proxy.join().unwrap();
+        cancel(&flow_id);
+        assert!(received.starts_with("POST http://127.0.0.1:9/gitlab/token HTTP/1.1"));
     }
 
     #[test]
