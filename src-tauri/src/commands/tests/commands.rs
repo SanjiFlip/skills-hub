@@ -35,6 +35,21 @@ fn github_oauth_uses_saved_github_proxy_only_for_github() {
     assert_eq!(oauth_proxy_url(&store, ProviderId::Gitee).unwrap(), "");
 }
 
+#[test]
+fn manual_device_sync_token_does_not_require_saved_authorization() {
+    let (_dir, store) = make_store();
+
+    let token = resolve_device_sync_token(
+        &store,
+        ProviderId::Gitee,
+        Some("  temporary-gitee-token  ".to_string()),
+        None,
+    )
+    .unwrap();
+
+    assert_eq!(token, "temporary-gitee-token");
+}
+
 fn sqlite_sidecar_path(db_path: &Path, suffix: &str) -> PathBuf {
     let mut path = db_path.as_os_str().to_os_string();
     path.push(suffix);

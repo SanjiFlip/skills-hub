@@ -2525,11 +2525,12 @@ pub async fn create_device_sync_repository(
 pub async fn list_device_sync_repositories(
     store: State<'_, SkillStore>,
     providerId: ProviderId,
+    token: Option<String>,
     credentialKey: Option<String>,
 ) -> Result<Vec<RemoteRepository>, String> {
     let store = store.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let token = resolve_device_sync_token(&store, providerId, None, credentialKey)?;
+        let token = resolve_device_sync_token(&store, providerId, token, credentialKey)?;
         provider(providerId).list_repositories(&token)
     })
     .await
