@@ -1143,6 +1143,45 @@ fn changing_remote_host_does_not_inherit_the_previous_credential_key() {
 }
 
 #[test]
+fn enabling_auto_sync_preserves_the_owned_credential_without_reading_it() {
+    let (_dir, store) = make_store();
+    let previous = DeviceSyncConfig {
+        provider: ProviderId::Gitee,
+        remote_url: "https://gitee.com/example/sync.git".to_string(),
+        credential_key: Some("existing-credential".to_string()),
+        ..DeviceSyncConfig::default()
+    };
+    store.save_device_sync_config(&previous).unwrap();
+    let usage =
+        CredentialUsage::from_https_remote(previous.provider, &previous.remote_url).unwrap();
+    let mut saved = previous.clone();
+    saved.auto_sync = true;
+    saved.credential_key = inherited_device_sync_credential(Some(&previous), &usage);
+    struct NoCredentialAccess;
+    impl CredentialStore for NoCredentialAccess {
+        fn get(&self, _: &str) -> anyhow::Result<Option<String>> {
+            panic!("settings save must not read credentials")
+        }
+        fn set(&self, _: &str, _: &str) -> anyhow::Result<()> {
+            panic!("settings save must not replace credentials")
+        }
+        fn delete(&self, _: &str) -> anyhow::Result<()> {
+            panic!("settings save must not delete credentials")
+        }
+    }
+    persist_device_sync_credential_replacement_with(&store, &NoCredentialAccess, None, || {
+        store.save_device_sync_config(&saved)
+    })
+    .unwrap();
+    let actual = store.get_device_sync_config().unwrap().unwrap();
+    assert!(actual.auto_sync);
+    assert_eq!(
+        actual.credential_key.as_deref(),
+        Some("existing-credential")
+    );
+}
+
+#[test]
 fn format_anyhow_error_passthrough_prefixes() {
     for message in [
         "MULTI_SKILLS|abc",

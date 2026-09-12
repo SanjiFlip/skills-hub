@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { listen } from '@tauri-apps/api/event'
 import type { TFunction } from 'i18next'
 import { toast } from 'sonner'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -12,6 +13,68 @@ vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn(async () => () => undefi
 vi.mock('@tauri-apps/plugin-opener', () => ({ openUrl: vi.fn() }))
 
 describe('DeviceSyncPage', () => {
+  it('shows a background credential failure without opening settings or requesting credentials', async () => {
+    invokeMock.mockImplementation((command: string) => {
+      if (command === 'get_device_sync_config') return Promise.resolve({ provider: 'gitee', remote_url: 'https://gitee.com/example/sync.git', branch: 'main', has_credential: true, visibility: 'private', auto_check: false, auto_sync: true, auto_sync_schedule: { mode: 'interval', minutes: 5 } })
+      if (command === 'get_device_sync_status') return Promise.resolve({ configured: true, is_running: false, last_run_status: 'failed', last_run_at: 2000, conflict_count: 0 })
+      if (command === 'get_device_sync_history') return Promise.resolve([{ id: 'failed', started_at: 1000, finished_at: 2000, status: 'failed', added: 0, updated: 0, deleted: 0, conflicted: 0, error: 'DEVICE_SYNC_FAILURE_credentialMissing' }])
+      if (command === 'get_device_sync_pending_oauth') return Promise.resolve(null)
+      return Promise.resolve([])
+    })
+    render(<DeviceSyncPage active isTauri onSkillsChanged={vi.fn(async () => undefined)} onConflictCountChange={vi.fn()} onOpenToolIssues={vi.fn()} t={((key: string) => key) as TFunction} />)
+    expect(await screen.findByRole('button', { name: 'deviceSync.configureCredentials' })).toBeTruthy()
+    expect(screen.getByText('deviceSync.failureReasons.credentialMissing')).toBeTruthy()
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(invokeMock.mock.calls.every(([command]) => ['get_device_sync_config', 'get_device_sync_status', 'get_device_sync_history', 'get_device_sync_conflicts', 'get_device_sync_oauth_availability', 'get_device_sync_pending_oauth', 'get_device_sync_devices'].includes(command))).toBe(true)
+  })
+
+  it('offers credential recovery after manual sync without reading credentials on page load', async () => {
+    const error = 'DEVICE_SYNC_READ_CREDENTIAL_REQUIRED'
+    const config = { provider: 'gitee', remote_url: 'https://gitee.com/example/sync.git', branch: 'main', has_credential: true, visibility: 'private', auto_check: false, auto_sync: false }
+    invokeMock.mockImplementation((command: string) => {
+      if (command === 'get_device_sync_config' || command === 'save_device_sync_config') return Promise.resolve(config)
+      if (command === 'list_device_sync_repositories') return Promise.resolve([{ name: 'sync', clone_url: config.remote_url, web_url: config.remote_url, visibility: 'private', private: true }])
+      if (command === 'get_device_sync_status') return Promise.resolve({ configured: true, is_running: false, last_run_status: 'failed', last_run_at: 2000, conflict_count: 0 })
+      if (command === 'get_device_sync_history') return Promise.resolve([{ id: 'failure', started_at: 1000, finished_at: 2000, status: 'failed', error: 'DEVICE_SYNC_FAILURE_credentialMissing', added: 0, updated: 0, deleted: 0, conflicted: 0 }])
+      if (command === 'get_device_sync_pending_oauth') return Promise.resolve(null)
+      if (command === 'run_device_sync') return Promise.reject(error)
+      return Promise.resolve([])
+    })
+    render(<DeviceSyncPage active isTauri onSkillsChanged={vi.fn(async () => undefined)} onConflictCountChange={vi.fn()} onOpenToolIssues={vi.fn()} t={((key: string) => key) as TFunction} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'deviceSync.syncLocalRepository' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'deviceSync.configureCredentials' }))
+    const dialog = screen.getByRole('dialog')
+    expect(within(dialog).getByText('deviceSync.advancedSettings').closest('details')?.open).toBe(true)
+    expect(within(dialog).queryByPlaceholderText('deviceSync.tokenStored')).toBeNull()
+    expect(invokeMock.mock.calls.some(([command]) => ['list_device_sync_repositories', 'start_device_sync_oauth', 'disconnect_device_sync'].includes(command))).toBe(false)
+    fireEvent.change(within(dialog).getByPlaceholderText('deviceSync.tokenPlaceholder'), { target: { value: 'replacement-test-token' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'deviceSync.loadRepositories' }))
+    await waitFor(() => expect(within(dialog).getByRole('button', { name: 'deviceSync.saveChanges' }).hasAttribute('disabled')).toBe(false))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'deviceSync.saveChanges' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(screen.queryByRole('button', { name: 'deviceSync.configureCredentials' })).toBeNull()
+    expect(invokeMock).toHaveBeenCalledWith('save_device_sync_config', { config: expect.objectContaining({ remote_url: config.remote_url, token: 'replacement-test-token', credential_key: null, auto_sync: false }) })
+    expect(invokeMock.mock.calls.some(([command]) => command === 'disconnect_device_sync')).toBe(false)
+  })
+
+  it('clears a manual credential warning when a later background sync succeeds', async () => {
+    let completed = false
+    invokeMock.mockImplementation((command: string) => {
+      if (command === 'get_device_sync_config') return Promise.resolve({ provider: 'gitee', remote_url: 'https://gitee.com/example/sync.git', branch: 'main', has_credential: true, visibility: 'private', auto_check: false, auto_sync: false })
+      if (command === 'get_device_sync_status') return Promise.resolve({ configured: true, is_running: false, last_run_status: 'success', last_run_at: completed ? 2000 : 1000, conflict_count: 0 })
+      if (command === 'get_device_sync_pending_oauth') return Promise.resolve(null)
+      if (command === 'run_device_sync') return Promise.reject('DEVICE_SYNC_READ_CREDENTIAL_REQUIRED')
+      return Promise.resolve([])
+    })
+    render(<DeviceSyncPage active isTauri onSkillsChanged={vi.fn(async () => undefined)} onConflictCountChange={vi.fn()} onOpenToolIssues={vi.fn()} t={((key: string) => key) as TFunction} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'deviceSync.syncLocalRepository' }))
+    await screen.findByRole('button', { name: 'deviceSync.configureCredentials' })
+    completed = true
+    const handler = vi.mocked(listen).mock.calls.filter(([name]) => name === 'device-sync-completed').at(-1)![1]
+    await act(async () => handler({ event: 'device-sync-completed', id: 1, payload: true }))
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'deviceSync.configureCredentials' })).toBeNull())
+  })
+
   it('only renames this device and refreshes its shared name without starting sync', async () => {
     let renamed = false
     invokeMock.mockImplementation((command: string) => {

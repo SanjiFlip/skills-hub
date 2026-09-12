@@ -119,6 +119,9 @@ const DeviceSyncPage = ({
   const [repositoryPickerOpen, setRepositoryPickerOpen] = useState(false)
   const [repositorySearch, setRepositorySearch] = useState('')
   const [settingsDrawerOpen, setSettingsDrawerOpen] = useState(false)
+  const [credentialFailure, setCredentialFailure] = useState<{ kind: string; runAt?: number | null } | null>(null)
+  const [resolvedCredentialFailureId, setResolvedCredentialFailureId] = useState<string | null>(null)
+  const [credentialRecoveryOpen, setCredentialRecoveryOpen] = useState(false)
   const automationSectionRef = useRef<HTMLElement>(null)
   const focusAutomationRef = useRef(false)
   const [initialLoadFailed, setInitialLoadFailed] = useState(false)
@@ -397,8 +400,17 @@ const DeviceSyncPage = ({
     setBusy(name)
     try {
       await action()
+      if (['sync', 'check', 'initial-sync', 'disconnect'].includes(name) || (name === 'save' && (form.token.trim() || form.oauthCredentialKey))) {
+        setCredentialFailure(null)
+        setResolvedCredentialFailureId(history[0]?.id ?? null)
+      }
     } catch (error) {
       const message = String(error)
+      const kind = message.includes('DEVICE_SYNC_READ_CREDENTIAL_REQUIRED') ? 'credentialMissing' : getSyncFailureKind(message)
+      if (['sync', 'check'].includes(name)) {
+        setCredentialFailure(['credentialMissing', 'credential', 'auth'].includes(kind) ? { kind, runAt: status?.last_run_at } : null)
+        setResolvedCredentialFailureId(null)
+      }
       const key = message === 'unsafe shared tool target' ? 'sharedTargetHelp'
         : message.includes('DEVICE_SYNC_VISIBILITY_UNKNOWN') ? 'visibilityUnknownHelp'
         : message.includes('DEVICE_SYNC_PUBLIC_UPLOAD_CONFIRMATION') ? 'publicUploadWarning'
@@ -693,7 +705,16 @@ const DeviceSyncPage = ({
     }
     setRepositoryPickerOpen(false)
     setRepositorySearch('')
+    setCredentialRecoveryOpen(false)
     setSettingsDrawerOpen(true)
+  }
+
+  const latestFailure = history[0]?.status === 'failed' && history[0]?.finished_at === status?.last_run_at && status?.last_run_status === 'failed' ? getSyncFailureKind(history[0].error) : null
+  const recoveryFailure = (credentialFailure?.runAt === status?.last_run_at ? credentialFailure?.kind : null) || (history[0]?.id !== resolvedCredentialFailureId && latestFailure && ['credentialMissing', 'credential', 'auth'].includes(latestFailure) ? latestFailure : null)
+  const recoverCredentials = () => {
+    openSettingsDrawer()
+    setForm((current) => ({ ...current, oauthCredentialKey: '' }))
+    setCredentialRecoveryOpen(true)
   }
 
   const savedSchedule = config?.auto_sync ? config.auto_sync_schedule : null
@@ -801,6 +822,7 @@ const DeviceSyncPage = ({
                 ) : null}
               </span>
             </div>
+            {recoveryFailure ? <div role="alert">{!latestFailure ? <p>{t(`deviceSync.failureReasons.${recoveryFailure}`)}</p> : null}<button className="btn btn-secondary" type="button" disabled={working} onClick={recoverCredentials}>{t('deviceSync.configureCredentials')}</button></div> : null}
             <div className="device-sync-status-actions"><button className="btn btn-secondary" type="button" disabled={!controls.canCheck} onClick={check}>{busy === 'check' ? <LoaderCircle className="spin" size={15} /> : <RefreshCw size={15} />}{t('deviceSync.check')}</button><button className="btn btn-primary" type="button" disabled={!controls.canSync || conflicts.length > 0} onClick={sync}>{synchronizationInProgress ? <LoaderCircle className="spin" size={15} /> : <Cloud size={15} />}{conflicts.length ? t('deviceSync.waitingForConflicts') : t(synchronizationInProgress ? 'deviceSync.exchangingContent' : 'deviceSync.syncLocalRepository')}</button></div>
             <ToolSyncNotice issues={status?.tool_issues ?? []} toolLabels={toolLabels} onOpen={onOpenToolIssues} t={t} />
             <section className={`device-sync-schedule-summary ${scheduleState}`} aria-label={t('deviceSync.scheduleSummary')}>
@@ -916,7 +938,7 @@ const DeviceSyncPage = ({
                   {!isDeviceSyncScheduleValid(form.schedule) ? <p className="device-sync-schedule-error" role="alert">{t('deviceSync.invalidSchedule')}</p> : null}
                 </div> : null}
               </section>
-              <section><details className="device-sync-advanced"><summary>{t('deviceSync.advancedSettings')}</summary><p>{t('deviceSync.advancedSettingsHelp')}</p><div className="device-sync-advanced-grid"><label className="device-sync-wide"><span>{t('deviceSync.remoteUrl')}</span><input value={form.remoteUrl} onChange={(event) => setForm(changeSyncRepositoryUrl(form, event.target.value))} /></label><label><span>{t('deviceSync.branch')}</span><input value={form.branch} onChange={(event) => setForm({ ...form, branch: event.target.value })} /></label><label><span>{t('deviceSync.token')}</span><input type="password" value={form.token} placeholder={config.has_credential ? t('deviceSync.tokenStored') : t('deviceSync.tokenPlaceholder')} onChange={(event) => changeToken(event.target.value)} /></label></div>{visibilitySettings}</details></section>
+              <section><details className="device-sync-advanced" open={credentialRecoveryOpen || undefined}><summary>{t('deviceSync.advancedSettings')}</summary><p>{t('deviceSync.advancedSettingsHelp')}</p><div className="device-sync-advanced-grid"><label className="device-sync-wide"><span>{t('deviceSync.remoteUrl')}</span><input value={form.remoteUrl} onChange={(event) => setForm(changeSyncRepositoryUrl(form, event.target.value))} /></label><label><span>{t('deviceSync.branch')}</span><input value={form.branch} onChange={(event) => setForm({ ...form, branch: event.target.value })} /></label><label><span>{t('deviceSync.token')}</span><input type="password" value={form.token} placeholder={config.has_credential && recoveryFailure !== 'credentialMissing' ? t('deviceSync.tokenStored') : t('deviceSync.tokenPlaceholder')} onChange={(event) => changeToken(event.target.value)} /></label></div>{form.token.trim() ? <button className="btn btn-secondary" type="button" disabled={working || repositoryLoadState === 'loading'} onClick={retryRepositories}>{t('deviceSync.loadRepositories')}</button> : null}{visibilitySettings}</details></section>
             </div>
             <footer><button className="btn btn-ghost device-sync-disconnect" type="button" disabled={working || synchronizationInProgress} onClick={disconnect}>{t('deviceSync.disconnect')}</button><span /><button className="btn btn-secondary" type="button" onClick={() => setSettingsDrawerOpen(false)}>{t('cancel')}</button><button className="btn btn-primary" type="button" disabled={!controls.canSave} onClick={save}>{busy === 'save' ? <LoaderCircle className="spin" size={15} /> : null}{t('deviceSync.saveChanges')}</button></footer>
           </aside>

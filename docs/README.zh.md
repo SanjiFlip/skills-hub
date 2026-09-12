@@ -34,47 +34,63 @@ My Skills 通过卡片和列表两种视图展示已托管 Skill 的来源、标
 
 Skills Hub 在已安装工具目录中发现可导入 Skill 后，会显示发现提示。用户可以查看并导入，或打开“扫描设置”按实际目录控制扫描来源；该设置与同步目标相互独立、重启后保留，并可随时从设置页重新打开。只有包含 `SKILL.md` 的目录会作为可导入 Skill 展示。
 
-![My Skills 卡片视图](./assets/my-skills-card-view.png)
+![My Skills 卡片视图](./assets/skills-library-cards.png)
 
-![My Skills 列表视图与批量操作](./assets/my-skills-list-bulk-actions.png)
+![My Skills 列表视图与批量操作](./assets/skills-library-bulk-actions.png)
+
+### Skill 详情 — 查看内容与同步目标
+
+打开 Skill 可以查看来源、标签、安装范围和同步状态，并通过文件树直接阅读 Markdown 文档或代码，无需离开应用。
+
+![Skill 详情、文件树与 Markdown 预览](./assets/skill-details.png)
 
 ### Explore — 精选 Skill 与在线搜索
 
 Explore 汇总精选仓库中的 Skill，并支持在线搜索。点击 Install 后可以继续选择标签、安装范围和目标工具。
 
-![在线探索 Skills](./assets/explore-online-skills.png)
+![在线探索 Skills](./assets/skills-explore.png)
 
 ### Add Skill — 安装前设置标签、范围和工具
 
 手动添加支持本地目录和 Git 仓库。安装前可以设置标签，选择全局或项目范围，并选择要同步到哪些工具。
 
-![从 Git 仓库添加 Skill](./assets/add-skill-git-repository.png)
+![从 Git 仓库添加 Skill](./assets/skills-install-git.png)
 
 ### Device Sync — 在多台设备间同步 Skill 库
 
 设备同步可连接 GitHub、GitLab 或 Gitee 仓库。你可以预览变化，手动、启动后、按间隔或每日定时同步，查看逐项历史并处理真实冲突；本机路径、工具目标和凭据不会进入同步仓库。
 
+首次使用时，先授权账号或配置 Token/SSH，再选择仓库并完成首次同步。
+
+![设备同步的平台选择与账号授权](./assets/device-sync-authorization.png)
+
+连接后，可在主页面查看最近同步状态、自动同步计划，以及每个 Skill 的变更记录。
+
+![设备同步主页面、自动同步计划与变更记录](./assets/device-sync-dashboard.png)
+
 ### Recycle Bin — 恢复已删除的 Skill
 
 删除的 Skill 会在本机回收站保留 30 天。只要原位置仍然可用，恢复时会一并还原文件和已保存的本机配置。
+
+![本机回收站、已删除 Skill 详情与恢复操作](./assets/recycle-bin-zh.png)
 
 ### Tools — 内置与自定义工具管理
 
 工具页集中展示已检测和已启用的 AI 编程工具，并使用对应产品图标增强识别。你可以启用内置目标，也可以为自定义工具配置头像、Skills 目录和明确的同步模式，并在创建后继续编辑。
 
-![内置与自定义工具管理](./assets/tools-management.png)
+![内置与自定义工具管理](./assets/tools-overview.png)
 
 ### Updates — 定时更新与运行结果
 
 更新页可以注册系统级定时任务，在应用关闭时继续更新 Git 和本地来源的 Skill；也可以立即执行更新，并查看最近一次运行的检查、更新和失败数量。
 
-![Skills 定时更新与运行结果](./assets/updates-scheduled-run.png)
+![Skills 定时更新与运行结果](./assets/skills-scheduled-updates.png)
 
 ### Settings — 应用级设置
 
 设置页只保留应用偏好：界面语言、外观、存储与缓存、GitHub Token、网络代理和应用版本更新。
 
-![应用偏好设置](./assets/settings-app-preferences.png)
+![应用偏好设置](./assets/app-settings.png)
 
 ## 工作方式
 

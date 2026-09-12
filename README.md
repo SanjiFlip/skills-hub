@@ -37,47 +37,63 @@ My Skills provides card and list views for each managed skill's source, tags, sy
 
 When Skills Hub discovers importable Skills in installed tool directories, the discovery banner lets you review them or open Scan settings. Scan sources are independent from sync targets, persist across restarts, and remain accessible from Settings. Only directories containing `SKILL.md` are shown as importable Skills.
 
-![My Skills card view](docs/assets/my-skills-card-view.png)
+![My Skills card view](docs/assets/skills-library-cards.png)
 
-![My Skills list view with bulk actions](docs/assets/my-skills-list-bulk-actions.png)
+![My Skills list view with bulk actions](docs/assets/skills-library-bulk-actions.png)
+
+### Skill Details — Inspect Content and Sync Targets
+
+Open a Skill to view its source, tags, scope, and sync status. Browse its file tree and read Markdown or code without leaving the app.
+
+![Skill details with file tree and Markdown preview](docs/assets/skill-details.png)
 
 ### Explore — Curated Skills and Online Search
 
 Explore brings together curated repository skills and online search. After clicking Install, you can choose tags, install scope, and target tools.
 
-![Explore online skills](docs/assets/explore-online-skills.png)
+![Explore online skills](docs/assets/skills-explore.png)
 
 ### Add Skill — Set Tags, Scope, and Tools Before Installation
 
 Manual add supports both local folders and Git repositories. Before installing, you can assign tags, choose global or project scope, and choose which tools to sync to.
 
-![Add a skill from a Git repository](docs/assets/add-skill-git-repository.png)
+![Add a skill from a Git repository](docs/assets/skills-install-git.png)
 
 ### Device Sync — Keep Your Skill Library Aligned
 
 Device Sync connects Skills Hub to a GitHub, GitLab, or Gitee repository. You can preview changes, synchronize manually, after startup, at an interval, or at a daily time, inspect per-Skill history, and resolve real conflicts without exposing device-local paths, tool targets, or credentials.
 
+Start by authorizing your account or configuring Token/SSH access, then choose a repository and complete the first sync.
+
+![Device Sync provider selection and account authorization](docs/assets/device-sync-authorization.png)
+
+Once connected, review the latest sync status, automatic sync schedule, and per-Skill changes from the dashboard.
+
+![Device Sync dashboard with status, schedule, and change history](docs/assets/device-sync-dashboard.png)
+
 ### Recycle Bin — Recover Deleted Skills
 
 Deleted Skills remain in a local recycle bin for 30 days. Restoring a Skill brings back its files and saved local configuration when the original locations are still available.
+
+![Local recycle bin with deleted Skill details and restore action](docs/assets/recycle-bin-en.png)
 
 ### Tools — Built-in and Custom Tool Management
 
 Tools shows detected and enabled AI coding tools with recognizable product icons. You can enable built-in targets or create and edit custom tools with an avatar, skills directories, and an explicit sync mode.
 
-![Built-in and custom tool management](docs/assets/tools-management.png)
+![Built-in and custom tool management](docs/assets/tools-overview.png)
 
 ### Updates — Scheduled Runs and Results
 
 Updates can register a system-level schedule that keeps Git and local-source skills current while the app is closed. You can also update immediately and review checked, updated, and failed counts from the latest run.
 
-![Scheduled skill updates and run results](docs/assets/updates-scheduled-run.png)
+![Scheduled skill updates and run results](docs/assets/skills-scheduled-updates.png)
 
 ### Settings — App-Level Preferences
 
 Settings keeps app-level preferences such as interface language, appearance, storage and cache, GitHub token, network proxy, and app updates.
 
-![Application preferences](docs/assets/settings-app-preferences.png)
+![Application preferences](docs/assets/app-settings.png)
 
 ## Workflow
 

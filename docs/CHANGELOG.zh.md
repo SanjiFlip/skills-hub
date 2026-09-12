@@ -20,6 +20,7 @@
 - **本地桌面 OAuth 配置**：`npm run tauri:dev` 和本地 `npm run tauri:build*` 命令现在会同时校验并注入 `SKILLS_HUB_GITHUB_CLIENT_ID` 与 `SKILLS_HUB_GITLAB_CLIENT_ID`；每个字段优先使用进程环境中的值，否则仅从仓库根目录 `.env` 或显式配置文件读取这两个白名单字段。已配置的 GitLab 浏览器授权因此可在开发版和安装版中使用。任一公开 Client ID 缺失或格式不合法时会在编译前停止，且不会导入 Client Secret、用户 Token 或其他字段。
 
 ### 修复
+- **同步凭据恢复与开发环境隔离**：开发版现在同时隔离应用数据目录和凭据命名空间，避免覆盖正式版同步配置。区分凭据缺失与安全存储无法访问，并在同步失败后提供用户主动打开的凭据配置入口，无需断开连接。后台失败不会自动弹出授权，设置展示不读取 Token。
 - **Gitee 手动 Token 配置**：填写个人访问令牌后会显示仓库加载入口，并仅在用户主动加载时将该令牌传给平台 API；即使当前版本不支持 Gitee 浏览器授权，也能在首次同步前识别仓库可见性。仓库加载使用 Gitee 支持的 `visibility=all` 筛选，兼容其真实响应中 `clone_url` 为 null、HTTPS Git 地址位于 `html_url` 的数据结构，会自动匹配带或不带 `.git` 后缀的已填写仓库地址，并支持在空仓库尚无目标分支时完成首次同步。
 - **统一网络代理链路**：设备同步的 Git 克隆、拉取和推送，GitHub、GitLab 与 Gitee 平台接口，OAuth 授权及令牌刷新，系统 Git 和 libgit2 备用链路现在都使用应用内配置的代理。关闭应用代理时也会阻止进程环境或 Git 全局代理悄悄改变网络路径，并通过自动边界检查防止后续代码绕过统一网络模块。
 - **Windows Rust 构建兼容性**：修复仅在 MSVC 下出现的类型与 lint 错误，使 `cargo clippy --all-targets` 和 Rust 测试目标能够在 Windows 上完成编译。既有的 `STATUS_ENTRYPOINT_NOT_FOUND` 测试程序启动问题不在本次修复范围内（修复 [#142](https://github.com/qufei1993/skills-hub/issues/142)，[PR #143](https://github.com/qufei1993/skills-hub/pull/143)）。

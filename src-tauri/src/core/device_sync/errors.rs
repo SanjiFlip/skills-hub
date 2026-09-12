@@ -4,6 +4,7 @@ const KINDS: &[&str] = &[
     "tls",
     "auth",
     "credential",
+    "credentialMissing",
     "visibility",
     "publicUpload",
     "privateKey",
@@ -47,12 +48,9 @@ pub(crate) fn safe_message(raw: &str) -> String {
         "decode device sync manifest",
     ]) {
         "integrity"
-    } else if has(&[
-        "keyring",
-        "keychain",
-        "credential",
-        "device_sync_read_credential_required",
-    ]) {
+    } else if has(&["device_sync_read_credential_required"]) {
+        "credentialMissing"
+    } else if has(&["keyring", "keychain", "credential"]) {
         "credential"
     } else if has(&[
         "authentication",
@@ -125,6 +123,7 @@ mod tests {
             ("certificate verify failed", "tls"),
             ("authentication failed", "auth"),
             ("keyring locked", "credential"),
+            ("DEVICE_SYNC_READ_CREDENTIAL_REQUIRED", "credentialMissing"),
             ("TARGET_MODIFIED|private/local/path", "targetModified"),
             ("text merge snapshot hash mismatch", "integrity"),
             ("no space left on device", "disk"),

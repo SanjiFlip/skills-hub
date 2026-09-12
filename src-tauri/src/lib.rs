@@ -8,6 +8,19 @@ use core::skill_store::{default_db_path, migrate_legacy_db_if_needed, SkillStore
 use tauri::Manager;
 use tauri_plugin_log::{Target, TargetKind};
 
+fn runtime_context() -> tauri::Context<tauri::Wry> {
+    let context = tauri::generate_context!();
+    #[cfg(debug_assertions)]
+    let context = {
+        let mut context: tauri::Context<tauri::Wry> = context;
+        if !context.config().identifier.ends_with(".dev") {
+            context.config_mut().identifier.push_str(".dev");
+        }
+        context
+    };
+    context
+}
+
 fn init_store<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> anyhow::Result<SkillStore> {
     let db_path = default_db_path(app)?;
     migrate_legacy_db_if_needed(&db_path)?;
@@ -281,7 +294,24 @@ pub fn run() {
                 window.app_handle().exit(0);
             }
         })
-        .build(tauri::generate_context!())
+        .build(runtime_context())
         .expect("error while running tauri application")
         .run(|_app, _event| {});
+}
+
+#[cfg(test)]
+mod environment_tests {
+    #[test]
+    fn development_data_is_separate_from_packaged_data() {
+        let packaged: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+        let identifier = packaged["identifier"].as_str().unwrap();
+        let runtime = super::runtime_context();
+        if cfg!(debug_assertions) {
+            assert_ne!(runtime.config().identifier, identifier);
+            assert_eq!(runtime.config().identifier, format!("{identifier}.dev"));
+        } else {
+            assert_eq!(runtime.config().identifier, identifier);
+        }
+    }
 }
