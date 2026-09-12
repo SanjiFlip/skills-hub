@@ -218,6 +218,11 @@ impl GitProvider for ApiProvider {
 
 fn normalize_repository(repo: RepositoryResponse) -> Result<RemoteRepository> {
     use super::types::RepositoryVisibility;
+    let web_url = repo
+        .html_url
+        .clone()
+        .or_else(|| repo.web_url.clone())
+        .unwrap_or_default();
     let visibility = match repo.visibility.as_deref() {
         Some("public") => RepositoryVisibility::Public,
         Some("private") => RepositoryVisibility::Private,
@@ -232,10 +237,11 @@ fn normalize_repository(repo: RepositoryResponse) -> Result<RemoteRepository> {
     Ok(RemoteRepository {
         visibility,
         name: repo.name,
-        web_url: repo.html_url.or(repo.web_url).unwrap_or_default(),
+        web_url,
         clone_url: repo
             .clone_url
             .or(repo.http_url_to_repo)
+            .or(repo.html_url)
             .context("provider response missing HTTPS clone URL")?,
         ssh_url: repo.ssh_url.or(repo.ssh_url_to_repo),
         private: repo.private.unwrap_or_else(|| {
@@ -455,7 +461,7 @@ mod tests {
     }
 
     #[test]
-    fn gitee_lists_all_visible_repositories_with_supported_filters() {
+    fn gitee_lists_repositories_with_supported_filters_and_real_response_shape() {
         let mut server = mockito::Server::new();
         let repositories = server
             .mock(
@@ -464,7 +470,7 @@ mod tests {
             )
             .match_header("authorization", "Bearer token")
             .with_status(200)
-            .with_body(r#"[{"name":"sync","html_url":"https://gitee/repo","clone_url":"https://gitee/repo.git","ssh_url":"git@gitee:repo.git","private":true}]"#)
+            .with_body(r#"[{"name":"sync","html_url":"https://gitee/repo.git","clone_url":null,"ssh_url":"git@gitee:repo.git","private":true}]"#)
             .create();
         let provider = ApiProvider::with_base_url(ProviderId::Gitee, server.url());
 
