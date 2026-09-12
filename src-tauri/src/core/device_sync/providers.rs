@@ -171,7 +171,7 @@ impl GitProvider for ApiProvider {
             ProviderId::Gitlab => {
                 "/projects?membership=true&simple=true&per_page=100&order_by=last_activity_at"
             }
-            ProviderId::Gitee => "/user/repos?type=all&per_page=100&sort=updated",
+            ProviderId::Gitee => "/user/repos?visibility=all&per_page=100&sort=updated",
         };
         let response = Self::checked(
             self.client
@@ -452,6 +452,27 @@ mod tests {
         let error = provider.validate_token("token").unwrap_err().to_string();
         assert!(!error.contains('\n'));
         request.assert();
+    }
+
+    #[test]
+    fn gitee_lists_all_visible_repositories_with_supported_filters() {
+        let mut server = mockito::Server::new();
+        let repositories = server
+            .mock(
+                "GET",
+                "/user/repos?visibility=all&per_page=100&sort=updated",
+            )
+            .match_header("authorization", "Bearer token")
+            .with_status(200)
+            .with_body(r#"[{"name":"sync","html_url":"https://gitee/repo","clone_url":"https://gitee/repo.git","ssh_url":"git@gitee:repo.git","private":true}]"#)
+            .create();
+        let provider = ApiProvider::with_base_url(ProviderId::Gitee, server.url());
+
+        let result = provider.list_repositories("token").unwrap();
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].clone_url, "https://gitee/repo.git");
+        repositories.assert();
     }
 
     #[test]
