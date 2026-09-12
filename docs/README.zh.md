@@ -72,7 +72,7 @@ Explore 汇总精选仓库中的 Skill，并支持在线搜索。点击 Install 
 
 删除的 Skill 会在本机回收站保留 30 天。只要原位置仍然可用，恢复时会一并还原文件和已保存的本机配置。
 
-![本机回收站、已删除 Skill 详情与恢复操作](./assets/recycle-bin-zh.png)
+![本机回收站、已删除 Skill 详情与恢复操作](./assets/recycle-bin.png)
 
 ### Tools — 内置与自定义工具管理
 

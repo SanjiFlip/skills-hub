@@ -75,7 +75,7 @@ Once connected, review the latest sync status, automatic sync schedule, and per-
 
 Deleted Skills remain in a local recycle bin for 30 days. Restoring a Skill brings back its files and saved local configuration when the original locations are still available.
 
-![Local recycle bin with deleted Skill details and restore action](docs/assets/recycle-bin-en.png)
+![Local recycle bin with deleted Skill details and restore action](docs/assets/recycle-bin.png)
 
 ### Tools — Built-in and Custom Tool Management
 
