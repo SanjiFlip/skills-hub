@@ -55,7 +55,7 @@ describe('DeviceSyncPage', () => {
     expect(screen.getByText('deviceSync.otherConnectionMethods').closest('details')?.open).toBe(true)
   })
 
-  it('uses an explicitly entered Gitee token to load repositories and identify visibility', async () => {
+  it('matches a typed Gitee URL after loading repositories and identifies visibility', async () => {
     let savedConfig: Record<string, unknown> | null = null
     invokeMock.mockImplementation((command: string, args?: { config?: Record<string, unknown> }) => {
       if (command === 'get_device_sync_config') return Promise.resolve(savedConfig)
@@ -82,19 +82,21 @@ describe('DeviceSyncPage', () => {
     render(<DeviceSyncPage active isTauri onSkillsChanged={vi.fn(async () => undefined)} onConflictCountChange={vi.fn()} onOpenToolIssues={vi.fn()} t={((key: string) => key) as TFunction} />)
 
     fireEvent.click(await screen.findByRole('button', { name: 'Gitee' }))
+    const remoteUrlInput = screen.getByText('deviceSync.remoteUrl').closest('label')?.querySelector('input')
+    expect(remoteUrlInput).toBeTruthy()
+    fireEvent.change(remoteUrlInput!, { target: { value: 'https://gitee.com/example/skills-hub-sync' } })
     const tokenInput = screen.getByText('deviceSync.token').closest('label')?.querySelector('input')
     expect(tokenInput).toBeTruthy()
     fireEvent.change(tokenInput!, { target: { value: 'gitee-test-token' } })
     expect(invokeMock.mock.calls.some(([command]) => command === 'list_device_sync_repositories')).toBe(false)
-    fireEvent.click(await screen.findByRole('button', { name: 'deviceSync.loadRepositories' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'deviceSync.refreshRepositories' }))
 
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith('list_device_sync_repositories', {
       providerId: 'gitee',
       token: 'gitee-test-token',
       credentialKey: null,
     }))
-    fireEvent.click(await screen.findByRole('radio', { name: /skills-hub-sync/ }))
-    expect(screen.getByLabelText('deviceSync.repositoryVisibility').textContent).toBe('deviceSync.visibility.private')
+    await waitFor(() => expect(screen.getByLabelText('deviceSync.repositoryVisibility').textContent).toBe('deviceSync.visibility.private'))
     fireEvent.click(screen.getByRole('button', { name: 'deviceSync.startSync' }))
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith('save_device_sync_config', {
       config: expect.objectContaining({

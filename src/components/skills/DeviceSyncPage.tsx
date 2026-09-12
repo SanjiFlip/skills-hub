@@ -86,6 +86,8 @@ type DeviceSyncPageProps = {
 
 const DEVICE_SYNC_HISTORY_PAGE_SIZE = 50
 const DEVICE_SYNC_HISTORY_LIMIT = 100
+const comparableRepositoryUrl = (value: string) =>
+  value.trim().replace(/\/+$/, '').replace(/\.git$/i, '')
 
 const DeviceSyncPage = ({
   active,
@@ -175,6 +177,16 @@ const DeviceSyncPage = ({
         )
         if (requestId !== repositoryRequestRef.current) return
         setRepositories(result.filter((repository) => repository.private))
+        setForm((current) => {
+          const currentUrl = comparableRepositoryUrl(current.remoteUrl)
+          if (!currentUrl) return current
+          const matchingRepository = result.find(
+            (repository) => comparableRepositoryUrl(repository.clone_url) === currentUrl,
+          )
+          return matchingRepository
+            ? selectSyncRepository(current, matchingRepository)
+            : current
+        })
         setRepositoryLoadState('loaded')
       } catch (error) {
         if (requestId === repositoryRequestRef.current) {
