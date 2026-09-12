@@ -1741,8 +1741,11 @@ mod tests {
         let central = root.path().join("central");
         add_skill_in_directory(&store, &central, "one", "one", "# Local edit");
         let workspace = root.path().join("workspace");
-        let repo =
-            git2::Repository::clone(&config.remote_url, workspace.join("repository")).unwrap();
+        let mut builder = git2::build::RepoBuilder::new();
+        builder.fetch_options(crate::core::network_proxy::git_fetch_options(""));
+        let repo = builder
+            .clone(&config.remote_url, &workspace.join("repository"))
+            .unwrap();
         let remote_commit = repo
             .find_reference("refs/remotes/origin/main")
             .unwrap()

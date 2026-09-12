@@ -4,10 +4,6 @@ import { fileURLToPath } from 'node:url'
 
 const STATIC_RULES = [
   {
-    rule: 'remote-git-transport',
-    pattern: /(?:FetchOptions|PushOptions)::new\s*\(|Repository::clone\s*\(/,
-  },
-  {
     rule: 'proxy-environment',
     pattern: /std::env::var\s*\(\s*"(?:HTTP|HTTPS|ALL|NO)_PROXY"/i,
   },
@@ -15,40 +11,35 @@ const STATIC_RULES = [
 
 const escapePattern = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
-const httpClientPattern = (source) => {
-  const names = ['Client', 'ClientBuilder']
-  for (const match of source.matchAll(/\b(?:Client|ClientBuilder)\s+as\s+([A-Za-z_]\w*)/g)) {
-    names.push(match[1])
+const namesWithAliases = (source, names) => {
+  const aliases = [...names]
+  const sourceNames = names.map(escapePattern).join('|')
+  const aliasPattern = new RegExp(`\\b(?:${sourceNames})\\s+as\\s+([A-Za-z_]\\w*)`, 'g')
+  for (const match of source.matchAll(aliasPattern)) {
+    aliases.push(match[1])
   }
-  const constructors = names.map(escapePattern).join('|')
+  return aliases.map(escapePattern).join('|')
+}
+
+const httpClientPattern = (source) => {
+  const constructors = namesWithAliases(source, ['Client', 'ClientBuilder'])
   return new RegExp(
     `\\b(?:(?:reqwest(?:::blocking)?::)?(?:${constructors}))::(?:builder|new|default)\\s*\\(`,
   )
 }
 
-const countCharacter = (value, character) =>
-  [...value].filter((candidate) => candidate === character).length
-
-const testOnlyLines = (lines) => {
-  const skipped = new Set()
-  for (let index = 0; index < lines.length; index += 1) {
-    if (lines[index].trim() !== '#[cfg(test)]') continue
-    let item = index + 1
-    while (item < lines.length && lines[item].trim() === '') item += 1
-    if (!/^mod\s+\w+\b/.test(lines[item]?.trim() ?? '')) continue
-
-    let depth = 0
-    let foundOpeningBrace = false
-    for (let current = index; current < lines.length; current += 1) {
-      skipped.add(current)
-      depth += countCharacter(lines[current], '{')
-      depth -= countCharacter(lines[current], '}')
-      foundOpeningBrace ||= lines[current].includes('{')
-      if (foundOpeningBrace && depth === 0) break
-    }
-  }
-  return skipped
+const remoteGitPattern = (source) => {
+  const constructors = namesWithAliases(source, ['FetchOptions', 'PushOptions'])
+  const repositories = namesWithAliases(source, ['Repository'])
+  return new RegExp(
+    `\\b(?:(?:git2::)?(?:${constructors})::new|(?:git2::)?(?:${repositories})::clone)\\s*\\(`,
+  )
 }
+
+/*
+ * Test code follows the same construction boundary as production code. This keeps
+ * the guard conservative and avoids trying to parse Rust syntax with line heuristics.
+ */
 
 const collectRustFiles = async (directory) => {
   const entries = await readdir(directory, { withFileTypes: true })
@@ -64,27 +55,23 @@ const collectRustFiles = async (directory) => {
   return files
 }
 
-const isTestFile = (relative) =>
-  relative.includes('/tests/') || relative.endsWith('.test.rs')
-
 export const checkNetworkBoundaries = async (rootDir) => {
   const sourceRoot = path.join(rootDir, 'src-tauri', 'src')
   const files = await collectRustFiles(sourceRoot)
   const violations = []
   for (const file of files.sort()) {
     const relative = path.relative(rootDir, file).split(path.sep).join('/')
-    if (relative === 'src-tauri/src/core/network_proxy.rs' || isTestFile(relative)) {
+    if (relative === 'src-tauri/src/core/network_proxy.rs') {
       continue
     }
     const source = await readFile(file, 'utf8')
     const lines = source.split('\n')
-    const skipped = testOnlyLines(lines)
     const rules = [
       { rule: 'direct-http-client', pattern: httpClientPattern(source) },
+      { rule: 'remote-git-transport', pattern: remoteGitPattern(source) },
       ...STATIC_RULES,
     ]
     for (let index = 0; index < lines.length; index += 1) {
-      if (skipped.has(index)) continue
       for (const { rule, pattern } of rules) {
         if (pattern.test(lines[index])) {
           violations.push({ rule, file: relative, line: index + 1 })
