@@ -174,6 +174,22 @@ export type AutoUpdateConfigDto = {
   progress: AutoUpdateProgressSnapshotDto
 }
 
+export type AutoUpdateRuntimeDto = Pick<
+  AutoUpdateConfigDto,
+  | 'local_skill_count'
+  | 'protected_local_skill_count'
+  | 'last_run_at'
+  | 'last_started_at'
+  | 'last_finished_at'
+  | 'last_status'
+  | 'last_error'
+  | 'last_checked'
+  | 'last_unchanged'
+  | 'last_updated'
+  | 'last_failed'
+  | 'progress'
+>
+
 export type AutoUpdateRunResultDto = {
   checked: number
   unchanged: number

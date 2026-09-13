@@ -1,9 +1,8 @@
-use std::path::{Path, PathBuf};
-use std::process::Command;
-
 use anyhow::{Context, Result};
+use std::path::{Path, PathBuf};
 
 use super::auto_update::{AutoUpdateIntervalUnit, AutoUpdateSchedule, AutoUpdateScheduleType};
+use super::process::background_command;
 
 pub const TASK_LABEL: &str = "com.skillshub.autoupdate";
 const BACKGROUND_TASK_ARGS: [&str; 3] = ["--background-task", "update-skills", "--force"];
@@ -287,10 +286,13 @@ fn install_macos_launch_agent(config: &SchedulerConfig) -> Result<()> {
         .join("Library/LaunchAgents");
     std::fs::create_dir_all(&dir).with_context(|| format!("create {:?}", dir))?;
     let plist = dir.join(format!("{TASK_LABEL}.plist"));
-    let _ = Command::new("launchctl").arg("unload").arg(&plist).output();
+    let _ = background_command("launchctl")
+        .arg("unload")
+        .arg(&plist)
+        .output();
     std::fs::write(&plist, build_launch_agent_plist(config))
         .with_context(|| format!("write {:?}", plist))?;
-    let out = Command::new("launchctl")
+    let out = background_command("launchctl")
         .arg("load")
         .arg(&plist)
         .output()
@@ -310,7 +312,10 @@ fn uninstall_macos_launch_agent() -> Result<()> {
         .context("resolve home dir")?
         .join("Library/LaunchAgents")
         .join(format!("{TASK_LABEL}.plist"));
-    let _ = Command::new("launchctl").arg("unload").arg(&plist).output();
+    let _ = background_command("launchctl")
+        .arg("unload")
+        .arg(&plist)
+        .output();
     if plist.exists() {
         std::fs::remove_file(&plist).with_context(|| format!("remove {:?}", plist))?;
     }
@@ -336,7 +341,7 @@ fn get_macos_launch_agent_status() -> SchedulerTaskStatus {
             detail: format!("missing {}", plist.to_string_lossy()),
         };
     }
-    let uid = std::process::Command::new("id")
+    let uid = background_command("id")
         .arg("-u")
         .output()
         .ok()
@@ -353,7 +358,7 @@ fn get_macos_launch_agent_status() -> SchedulerTaskStatus {
             detail: format!("plist exists: {}", plist.to_string_lossy()),
         };
     };
-    let out = Command::new("launchctl")
+    let out = background_command("launchctl")
         .args(["print", &format!("gui/{uid}/{TASK_LABEL}")])
         .output();
     match out {
@@ -382,7 +387,7 @@ fn trigger_macos_launch_agent_now() -> Result<()> {
         anyhow::bail!("auto update task is not ready: {}", status.detail);
     }
     let uid = current_uid()?;
-    let out = Command::new("launchctl")
+    let out = background_command("launchctl")
         .args(launchctl_kickstart_args(uid))
         .output()
         .context("launchctl kickstart")?;
@@ -397,7 +402,10 @@ fn trigger_macos_launch_agent_now() -> Result<()> {
 
 #[cfg(target_os = "macos")]
 fn current_uid() -> Result<u32> {
-    let out = Command::new("id").arg("-u").output().context("id -u")?;
+    let out = background_command("id")
+        .arg("-u")
+        .output()
+        .context("id -u")?;
     if !out.status.success() {
         anyhow::bail!("id -u failed: {}", String::from_utf8_lossy(&out.stderr));
     }
@@ -409,7 +417,7 @@ fn current_uid() -> Result<u32> {
 
 #[cfg(target_os = "windows")]
 fn install_windows_task(config: &SchedulerConfig) -> Result<()> {
-    let out = Command::new("schtasks")
+    let out = background_command("schtasks")
         .args(windows_schtasks_args(config)?)
         .output()
         .context("schtasks create")?;
@@ -424,7 +432,7 @@ fn install_windows_task(config: &SchedulerConfig) -> Result<()> {
 
 #[cfg(target_os = "windows")]
 fn uninstall_windows_task() -> Result<()> {
-    let out = Command::new("schtasks")
+    let out = background_command("schtasks")
         .args(["/Delete", "/F", "/TN", TASK_LABEL])
         .output()
         .context("schtasks delete")?;
@@ -439,7 +447,7 @@ fn uninstall_windows_task() -> Result<()> {
 
 #[cfg(target_os = "windows")]
 fn get_windows_task_status() -> SchedulerTaskStatus {
-    let out = Command::new("schtasks")
+    let out = background_command("schtasks")
         .args(["/Query", "/TN", TASK_LABEL])
         .output();
     match out {
@@ -464,7 +472,7 @@ fn trigger_windows_task_now() -> Result<()> {
     if !status.registered {
         anyhow::bail!("auto update task is not ready: {}", status.detail);
     }
-    let out = Command::new("schtasks")
+    let out = background_command("schtasks")
         .args(windows_schtasks_run_args())
         .output()
         .context("schtasks run")?;
@@ -513,11 +521,11 @@ fn uninstall_linux_systemd_timer() -> Result<()> {
 #[cfg(all(unix, not(target_os = "macos")))]
 fn get_linux_systemd_timer_status() -> SchedulerTaskStatus {
     let unit = format!("{TASK_LABEL}.timer");
-    let enabled = Command::new("systemctl")
+    let enabled = background_command("systemctl")
         .arg("--user")
         .args(["is-enabled", &unit])
         .output();
-    let active = Command::new("systemctl")
+    let active = background_command("systemctl")
         .arg("--user")
         .args(["is-active", &unit])
         .output();
@@ -556,7 +564,7 @@ fn trigger_linux_systemd_service_now() -> Result<()> {
         anyhow::bail!("auto update task is not ready: {}", status.detail);
     }
     let args = systemd_start_args();
-    let out = Command::new("systemctl")
+    let out = background_command("systemctl")
         .args(args.iter().map(String::as_str))
         .output()
         .context("systemctl --user start auto update service")?;
@@ -571,7 +579,7 @@ fn trigger_linux_systemd_service_now() -> Result<()> {
 
 #[cfg(all(unix, not(target_os = "macos")))]
 fn run_systemctl_user(args: &[&str]) -> Result<()> {
-    let out = Command::new("systemctl")
+    let out = background_command("systemctl")
         .arg("--user")
         .args(args)
         .output()

@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-09-13
+
+### 修复
+- **Windows 命令窗口闪烁**：自动更新进度刷新改为直接读取运行数据，不再每 5 秒查询操作系统计划任务；Windows 下的计划任务及系统 Git 子进程也会以无控制台窗口方式启动，在保留后台进度更新的同时避免命令窗口反复闪现（修复 [#150](https://github.com/qufei1993/skills-hub/issues/150)）。
+
 ## [0.10.0]
 
 ### 新增
@@ -266,7 +271,8 @@
 ### 性能
 - Git 导入/批量安装优化：缓存 clone 减少重复拉取；增加超时与无交互提示提升稳定性。
 
-[Unreleased]: https://github.com/qufei1993/skills-hub/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/qufei1993/skills-hub/compare/v0.10.1...HEAD
+[0.10.1]: https://github.com/qufei1993/skills-hub/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/qufei1993/skills-hub/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/qufei1993/skills-hub/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/qufei1993/skills-hub/compare/v0.8.1...v0.9.0

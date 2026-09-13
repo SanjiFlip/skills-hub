@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-09-13
+
+### Fixed
+- **Windows command-window flashing**: Automatic-update progress refreshes now read runtime data without querying the operating-system scheduler every five seconds. Windows scheduler and system Git child processes also start without a console window, preventing repeated command-window flashes while preserving background progress updates (fixes [#150](https://github.com/qufei1993/skills-hub/issues/150)).
+
 ## [0.10.0]
 
 ### Added
@@ -267,7 +272,8 @@ All notable changes to this project will be documented in this file.
 ### Performance
 - Git import and batch install optimizations: cached clones reduce repeated fetches; timeouts and non‑interactive git improve stability.
 
-[Unreleased]: https://github.com/qufei1993/skills-hub/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/qufei1993/skills-hub/compare/v0.10.1...HEAD
+[0.10.1]: https://github.com/qufei1993/skills-hub/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/qufei1993/skills-hub/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/qufei1993/skills-hub/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/qufei1993/skills-hub/compare/v0.8.1...v0.9.0

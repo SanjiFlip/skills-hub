@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 import { act, cleanup, renderHook } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
-import type { AutoUpdateConfigDto } from './types'
+import type { AutoUpdateRuntimeDto } from './types'
 import { useSkillStatusRefresh } from './useSkillStatusRefresh'
 
 afterEach(() => { cleanup(); vi.useRealTimers() })
 it('refreshes on initial finished result, background progress and window focus', async () => {
   vi.useFakeTimers()
-  let config = { last_run_at: 100, last_status: 'ok', progress: { total: 0, succeeded: [], failed: [], pending: [], running: null } } as unknown as AutoUpdateConfigDto
+  let config = { last_run_at: 100, last_status: 'ok', progress: { total: 0, succeeded: [], failed: [], pending: [], running: null } } as unknown as AutoUpdateRuntimeDto
   const read = async () => config
   let refreshes = 0
   const refresh = async () => { refreshes++ }
