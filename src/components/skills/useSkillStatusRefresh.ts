@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
-import type { AutoUpdateConfigDto } from './types'
+import type { AutoUpdateRuntimeDto } from './types'
 
-export function useSkillStatusRefresh(enabled: boolean, read: () => Promise<AutoUpdateConfigDto>, receive: (config: AutoUpdateConfigDto) => void, refresh: () => Promise<void>) {
+export function useSkillStatusRefresh(enabled: boolean, read: () => Promise<AutoUpdateRuntimeDto>, receive: (runtime: AutoUpdateRuntimeDto) => void, refresh: () => Promise<void>) {
   useEffect(() => {
     if (!enabled) return
     let cancelled = false
@@ -11,10 +11,10 @@ export function useSkillStatusRefresh(enabled: boolean, read: () => Promise<Auto
       if (cancelled || inFlight) return
       inFlight = true
       try {
-        const config = await read()
+        const runtime = await read()
         if (cancelled) return
-        receive(config)
-        const signature = JSON.stringify([config.last_run_at, config.last_status, config.progress])
+        receive(runtime)
+        const signature = JSON.stringify([runtime.last_run_at, runtime.last_status, runtime.progress])
         if (force || signature !== lastSignature) {
           await refresh()
           lastSignature = signature

@@ -548,6 +548,22 @@ pub struct AutoUpdateConfigDto {
 }
 
 #[derive(Debug, Serialize)]
+pub struct AutoUpdateRuntimeDto {
+    pub local_skill_count: usize,
+    pub protected_local_skill_count: usize,
+    pub last_run_at: Option<i64>,
+    pub last_started_at: Option<i64>,
+    pub last_finished_at: Option<i64>,
+    pub last_status: Option<String>,
+    pub last_error: Option<String>,
+    pub last_checked: usize,
+    pub last_unchanged: usize,
+    pub last_updated: usize,
+    pub last_failed: usize,
+    pub progress: AutoUpdateProgressSnapshot,
+}
+
+#[derive(Debug, Serialize)]
 pub struct AutoUpdateRunResultDto {
     pub checked: usize,
     pub unchanged: usize,
@@ -572,6 +588,19 @@ pub async fn get_auto_update_config(
     let store = store.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         get_auto_update_config_core(&store).map(to_auto_update_config_dto)
+    })
+    .await
+    .map_err(|err| err.to_string())?
+    .map_err(format_anyhow_error)
+}
+
+#[tauri::command]
+pub async fn get_auto_update_runtime(
+    store: State<'_, SkillStore>,
+) -> Result<AutoUpdateRuntimeDto, String> {
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        get_auto_update_config_core(&store).map(to_auto_update_runtime_dto)
     })
     .await
     .map_err(|err| err.to_string())?
@@ -1994,6 +2023,23 @@ fn to_auto_update_config_dto(mut config: AutoUpdateConfig) -> AutoUpdateConfigDt
         protected_local_skill_count: config.protected_local_skill_count,
         task_registered: task_status.registered,
         task_status_detail: task_status.detail,
+        last_run_at: config.last_run_at,
+        last_started_at: config.last_started_at,
+        last_finished_at: config.last_finished_at,
+        last_status: config.last_status,
+        last_error: config.last_error,
+        last_checked: config.last_checked,
+        last_unchanged: config.last_unchanged,
+        last_updated: config.last_updated,
+        last_failed: config.last_failed,
+        progress: config.progress,
+    }
+}
+
+fn to_auto_update_runtime_dto(config: AutoUpdateConfig) -> AutoUpdateRuntimeDto {
+    AutoUpdateRuntimeDto {
+        local_skill_count: config.local_skill_count,
+        protected_local_skill_count: config.protected_local_skill_count,
         last_run_at: config.last_run_at,
         last_started_at: config.last_started_at,
         last_finished_at: config.last_finished_at,

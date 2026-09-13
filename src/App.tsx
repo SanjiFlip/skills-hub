@@ -81,6 +81,7 @@ import {
 } from './components/skills/installScope'
 import type {
   AutoUpdateConfigDto,
+  AutoUpdateRuntimeDto,
   DiscoveryScanSettingsDto,
   FeaturedSkillDto,
   GitSkillCandidate,
@@ -1078,8 +1079,19 @@ function App() {
     }
   }, [updaterProxyOptions])
 
-  const readAutoUpdateStatus = useCallback(() => invokeTauri<AutoUpdateConfigDto>('get_auto_update_config'), [invokeTauri])
-  useSkillStatusRefresh(isTauri, readAutoUpdateStatus, setAutoUpdateConfig, loadManagedSkills)
+  const readAutoUpdateStatus = useCallback(
+    () => invokeTauri<AutoUpdateRuntimeDto>('get_auto_update_runtime'),
+    [invokeTauri],
+  )
+  const receiveAutoUpdateStatus = useCallback((runtime: AutoUpdateRuntimeDto) => {
+    setAutoUpdateConfig((current) => current ? { ...current, ...runtime } : current)
+  }, [])
+  useSkillStatusRefresh(
+    isTauri,
+    readAutoUpdateStatus,
+    receiveAutoUpdateStatus,
+    loadManagedSkills,
+  )
 
   const handlePickStoragePath = useCallback(async () => {
     try {
@@ -1374,21 +1386,21 @@ function App() {
       let sawRunning = false
       for (let attempt = 0; attempt < 30; attempt += 1) {
         await new Promise((resolve) => window.setTimeout(resolve, 2000))
-        const latestConfig = await invokeTauri<AutoUpdateConfigDto>(
-          'get_auto_update_config',
+        const latestRuntime = await invokeTauri<AutoUpdateRuntimeDto>(
+          'get_auto_update_runtime',
         )
-        if (latestConfig.last_status === 'running') {
+        if (latestRuntime.last_status === 'running') {
           sawRunning = true
         }
         const keepWaiting = shouldKeepWaitingForTriggeredAutoUpdate(
-          latestConfig,
+          latestRuntime,
           triggeredAt,
           sawRunning,
         )
-        if (keepWaiting && latestConfig.last_status !== 'running') {
+        if (keepWaiting && latestRuntime.last_status !== 'running') {
           continue
         }
-        setAutoUpdateConfig(latestConfig)
+        receiveAutoUpdateStatus(latestRuntime)
         if (!keepWaiting) {
           await loadManagedSkills()
           break
@@ -1399,7 +1411,7 @@ function App() {
     } finally {
       setAutoUpdateTriggering(false)
     }
-  }, [autoUpdateTriggering, invokeTauri, isTauri, loadManagedSkills, t])
+  }, [autoUpdateTriggering, invokeTauri, isTauri, loadManagedSkills, receiveAutoUpdateStatus, t])
   const handleClearGitCacheNow = useCallback(async (): Promise<boolean> => {
     if (!isTauri) {
       setError(t('errors.notTauri'))

@@ -9,6 +9,7 @@ use git2::{build::RepoBuilder, Repository};
 
 use super::cancel_token::CancelToken;
 use super::network_proxy::git_fetch_options;
+use super::process::background_command;
 
 pub fn clone_or_pull(
     repo_url: &str,
@@ -343,7 +344,7 @@ fn resolve_git_bin() -> Option<String> {
 }
 
 fn git_bin_works(bin: &str) -> bool {
-    Command::new(bin)
+    background_command(bin)
         .arg("--version")
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -359,7 +360,7 @@ fn git_cmd(proxy_url: Option<&str>) -> Command {
 
 fn git_cmd_for_remote(proxy_url: Option<&str>, remote_url: Option<&str>) -> Command {
     let bin = resolve_git_bin().unwrap_or_else(|| "git".to_string());
-    let mut cmd = Command::new(bin);
+    let mut cmd = background_command(bin);
     let proxy_url = proxy_url.map(str::trim).unwrap_or_default();
     cmd.arg("-c")
         .arg(format!("http.proxy={proxy_url}"))

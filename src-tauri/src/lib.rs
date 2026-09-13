@@ -221,6 +221,7 @@ pub fn run() {
             commands::set_git_cache_ttl_secs,
             commands::clear_git_cache_now,
             commands::get_auto_update_config,
+            commands::get_auto_update_runtime,
             commands::set_auto_update_config,
             commands::run_auto_update_now,
             commands::trigger_auto_update_task_now_cmd,
