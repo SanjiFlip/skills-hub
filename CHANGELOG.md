@@ -8,6 +8,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 - **Recovering a library from the central repository**: Skills that still exist in the central repository are offered for import again when the library has no record of them. A cleared or lost database previously left that content unreachable — every tool mirror is a link into the central repository, so tool scans skipped it, and adding the folder by hand failed with `skill already exists in central repo`. A central folder whose content matches the folder being added is now adopted in place, without copying it or creating a duplicate, and the central repository is offered as a discovery source that can be switched off like any other. A folder whose content differs is still rejected.
+- **Hollow Skills are reported instead of looking healthy**: A managed Skill whose folder in the central repository is missing now reports that as its own issue instead of appearing usable, including Skills that have no external source — that case previously short-circuited the status check and showed a green state for a Skill whose content was gone. Adopting a folder for a name that already has such a record repairs that record by re-pointing it at the folder that exists, so its tags, enabled state and tool targets survive and no duplicate Skill is created.
 
 ## [0.10.2] - 2026-09-17
 
