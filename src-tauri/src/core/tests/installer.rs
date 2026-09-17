@@ -844,6 +844,77 @@ fn adopts_a_central_folder_the_library_has_no_record_for() {
 }
 
 #[test]
+fn adopting_repairs_a_record_whose_central_folder_is_gone() {
+    let app = tauri::test::mock_app();
+    let (_dir, store) = make_store();
+    let central_root = tempfile::tempdir().unwrap();
+    set_central_path(&store, central_root.path());
+
+    // The folder exists and holds the content.
+    let folder = central_root.path().join("kept");
+    fs::create_dir_all(&folder).unwrap();
+    fs::write(folder.join("SKILL.md"), b"---\nname: kept\n---\n").unwrap();
+
+    // The library, however, points at a path that no longer exists.
+    let stranded = SkillRecord {
+        id: "stranded-id".to_string(),
+        name: "kept".to_string(),
+        description: None,
+        source_type: "local".to_string(),
+        source_ref: None,
+        source_subpath: None,
+        source_revision: None,
+        central_path: central_root
+            .path()
+            .join("kept-9f3a1b2c")
+            .to_string_lossy()
+            .to_string(),
+        content_hash: None,
+        created_at: 1,
+        updated_at: 1,
+        last_sync_at: None,
+        last_seen_at: 1,
+        enabled: true,
+        status: "ok".to_string(),
+    };
+    store.commit_skill_update(&stranded, &[]).unwrap();
+    store
+        .upsert_skill_target(&SkillTargetRecord {
+            id: "target-1".to_string(),
+            skill_id: "stranded-id".to_string(),
+            tool: "codex".to_string(),
+            scope: "global".to_string(),
+            project_path: None,
+            target_path: central_root.path().join("t").to_string_lossy().to_string(),
+            mode: "junction".to_string(),
+            status: "disabled".to_string(),
+            last_error: None,
+            synced_at: None,
+        })
+        .unwrap();
+
+    let adopted =
+        super::install_local_skill(app.handle(), &store, &folder, Some("kept".to_string()))
+            .unwrap();
+
+    // The existing record is repaired rather than duplicated.
+    assert_eq!(adopted.skill_id, "stranded-id");
+    assert_eq!(adopted.central_path, folder);
+    let skills = store.list_skills().unwrap();
+    assert_eq!(skills.len(), 1, "no second record for the same Skill");
+    let record = &skills[0];
+    assert_eq!(record.central_path, folder.to_string_lossy());
+    assert_eq!(record.status, "ok");
+    assert!(record.content_hash.is_some());
+    assert_eq!(record.created_at, 1, "the record keeps its identity");
+    assert_eq!(
+        store.list_skill_targets("stranded-id").unwrap().len(),
+        1,
+        "saved tool targets survive the repair"
+    );
+}
+
+#[test]
 fn still_rejects_a_central_folder_whose_content_differs_from_the_source() {
     let app = tauri::test::mock_app();
     let (_dir, store) = make_store();
