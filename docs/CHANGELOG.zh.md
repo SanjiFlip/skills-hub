@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+## [0.10.3] - 2026-09-17
+
+### 修复
+- **可从中央技能库恢复库内容**：仍存在于中央技能库中、但库中没有记录的技能，现在会重新出现在可导入列表中。此前数据库被清空或丢失后，这些内容会彻底无法取用——工具目录里的镜像都是指向中央库的链接，因此工具扫描会跳过它们，而手动按文件夹添加又会报 `skill already exists in central repo`。现在，当中央库中已有内容与所选来源一致时，会**就地采纳**（不复制、不产生重复目录），并且中央技能库本身会作为发现来源列出、可像其他来源一样关闭。内容不一致时仍然拒绝。
+
 ## [0.10.2] - 2026-09-17
 
 ### 新增
@@ -283,7 +288,8 @@
 ### 性能
 - Git 导入/批量安装优化：缓存 clone 减少重复拉取；增加超时与无交互提示提升稳定性。
 
-[Unreleased]: https://github.com/qufei1993/skills-hub/compare/v0.10.2...HEAD
+[Unreleased]: https://github.com/qufei1993/skills-hub/compare/v0.10.3...HEAD
+[0.10.3]: https://github.com/qufei1993/skills-hub/compare/v0.10.2...v0.10.3
 [0.10.2]: https://github.com/qufei1993/skills-hub/compare/v0.10.1...v0.10.2
 [0.10.1]: https://github.com/qufei1993/skills-hub/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/qufei1993/skills-hub/compare/v0.9.1...v0.10.0

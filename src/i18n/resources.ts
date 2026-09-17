@@ -930,6 +930,7 @@ export const resources = {
       toolsScanned: 'Tools scanned: {{count}}',
       skillsFound: 'Skills found: {{count}}',
       foundIn: 'Found in',
+      centralRepoSource: 'Found in the central library',
       claudePluginSource: 'Claude Code plugin · {{plugin}} · User',
       claudePluginSourceWithVersion:
         'Claude Code plugin · {{plugin}} · v{{version}} · User',
@@ -2016,6 +2017,7 @@ export const resources = {
       toolsScanned: '已扫描工具数：{{count}}',
       skillsFound: '发现 Skills 数：{{count}}',
       foundIn: '发现于',
+      centralRepoSource: '已存在于中央技能库',
       claudePluginSource: 'Claude Code 插件 · {{plugin}} · 用户级',
       claudePluginSourceWithVersion:
         'Claude Code 插件 · {{plugin}} · v{{version}} · 用户级',
