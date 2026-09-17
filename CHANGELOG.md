@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.10.3] - 2026-09-17
+
+### Fixed
+- **Recovering a library from the central repository**: Skills that still exist in the central repository are offered for import again when the library has no record of them. A cleared or lost database previously left that content unreachable — every tool mirror is a link into the central repository, so tool scans skipped it, and adding the folder by hand failed with `skill already exists in central repo`. A central folder whose content matches the folder being added is now adopted in place, without copying it or creating a duplicate, and the central repository is offered as a discovery source that can be switched off like any other. A folder whose content differs is still rejected.
+
+## [0.10.2] - 2026-09-17
+
+### Added
+- **Notification-area icon**: Skills Hub now shows a tray icon with "Show Skills Hub" and "Quit Skills Hub". Left-clicking the icon restores the window, and the menu labels follow the interface language.
+
+### Changed
+- **Closing hides to the tray**: The window's close button no longer quits the app. It hides the window so scheduled updates and device sync keep running in the background; use the tray menu to quit. If the tray icon cannot be created, closing still quits so the app can never become unreachable.
+
+### Fixed
+- **Hidden background updates**: Scheduled and manual automatic-update runs no longer put a window on screen. A background run previously created the window declared in the configuration before `setup` and then ran the whole update behind it, leaving a visible, unresponsive window for the duration of every update. It now skips creating that window entirely, which also avoids booting WebView2 and the web app for a headless run. "Update now" performs the update inside the running app instead of asking the operating-system scheduler to start a second instance of it, and SQLite connections wait for a concurrent writer instead of failing immediately.
+- **Automatic-update task registration**: "Update now" no longer re-registers the operating-system schedule. It previously registered the task unconditionally, which re-created it even when automatic updates were switched off — so updates kept running, with a window, behind the user's back. Only the automatic-update setting installs or removes that task now.
+
 ## [0.10.1] - 2026-09-13
 
 ### Fixed
@@ -272,7 +289,9 @@ All notable changes to this project will be documented in this file.
 ### Performance
 - Git import and batch install optimizations: cached clones reduce repeated fetches; timeouts and non‑interactive git improve stability.
 
-[Unreleased]: https://github.com/qufei1993/skills-hub/compare/v0.10.1...HEAD
+[Unreleased]: https://github.com/qufei1993/skills-hub/compare/v0.10.3...HEAD
+[0.10.3]: https://github.com/qufei1993/skills-hub/compare/v0.10.2...v0.10.3
+[0.10.2]: https://github.com/qufei1993/skills-hub/compare/v0.10.1...v0.10.2
 [0.10.1]: https://github.com/qufei1993/skills-hub/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/qufei1993/skills-hub/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/qufei1993/skills-hub/compare/v0.9.0...v0.9.1
