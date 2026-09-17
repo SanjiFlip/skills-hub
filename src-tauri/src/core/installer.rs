@@ -173,22 +173,41 @@ fn adopt_existing_central_skill(
         .is_some_and(|(source, central)| source == central);
     let source_ref = (!points_at_central).then(|| source_path.to_string_lossy().to_string());
 
-    let record = SkillRecord {
-        id: Uuid::new_v4().to_string(),
-        name,
-        description,
-        source_type: "local".to_string(),
-        source_ref,
-        source_subpath: None,
-        source_revision: None,
-        central_path: central_path.to_string_lossy().to_string(),
-        content_hash: content_hash.clone(),
-        created_at: now,
-        updated_at: now,
-        last_sync_at: None,
-        last_seen_at: now,
-        enabled: true,
-        status: "ok".to_string(),
+    let record = match store
+        .list_skills()?
+        .into_iter()
+        .find(|skill| skill.name == name && !Path::new(&skill.central_path).exists())
+    {
+        // A record for this name can already exist while its central folder is gone. Such
+        // a record is hollow: re-pointing it at the folder that does exist keeps its
+        // identity, so its tags, enabled state and tool targets survive, and adopting a
+        // library folder never leaves two records describing the same Skill.
+        Some(mut record) => {
+            record.description = record.description.or(description);
+            record.central_path = central_path.to_string_lossy().to_string();
+            record.content_hash = content_hash.clone();
+            record.updated_at = now;
+            record.last_seen_at = now;
+            record.status = "ok".to_string();
+            record
+        }
+        None => SkillRecord {
+            id: Uuid::new_v4().to_string(),
+            name,
+            description,
+            source_type: "local".to_string(),
+            source_ref,
+            source_subpath: None,
+            source_revision: None,
+            central_path: central_path.to_string_lossy().to_string(),
+            content_hash: content_hash.clone(),
+            created_at: now,
+            updated_at: now,
+            last_sync_at: None,
+            last_seen_at: now,
+            enabled: true,
+            status: "ok".to_string(),
+        },
     };
 
     store.commit_skill_update(&record, &[])?;
