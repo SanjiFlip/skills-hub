@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.10.3] - 2026-09-17
+
+### Fixed
+- **Recovering a library from the central repository**: Skills that still exist in the central repository are offered for import again when the library has no record of them. A cleared or lost database previously left that content unreachable — every tool mirror is a link into the central repository, so tool scans skipped it, and adding the folder by hand failed with `skill already exists in central repo`. A central folder whose content matches the folder being added is now adopted in place, without copying it or creating a duplicate, and the central repository is offered as a discovery source that can be switched off like any other. A folder whose content differs is still rejected.
+
 ## [0.10.2] - 2026-09-17
 
 ### Added
@@ -284,7 +289,8 @@ All notable changes to this project will be documented in this file.
 ### Performance
 - Git import and batch install optimizations: cached clones reduce repeated fetches; timeouts and non‑interactive git improve stability.
 
-[Unreleased]: https://github.com/qufei1993/skills-hub/compare/v0.10.2...HEAD
+[Unreleased]: https://github.com/qufei1993/skills-hub/compare/v0.10.3...HEAD
+[0.10.3]: https://github.com/qufei1993/skills-hub/compare/v0.10.2...v0.10.3
 [0.10.2]: https://github.com/qufei1993/skills-hub/compare/v0.10.1...v0.10.2
 [0.10.1]: https://github.com/qufei1993/skills-hub/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/qufei1993/skills-hub/compare/v0.9.1...v0.10.0

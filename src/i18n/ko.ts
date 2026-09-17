@@ -917,6 +917,7 @@ export const ko = {
     "toolsScanned": "스캔된 도구: {{count}}",
     "skillsFound": "발견된 스킬: {{count}}개",
     "foundIn": "다음에서 발견됨",
+    "centralRepoSource": "중앙 라이브러리에 있음",
     "claudePluginSource": "Claude Code 플러그인 · {{plugin}} · 사용자",
     "claudePluginSourceWithVersion": "클로드 코드 플러그인 · {{plugin}} · v{{version}} · 사용자",
     "errors": {
