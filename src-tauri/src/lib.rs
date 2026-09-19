@@ -5,36 +5,8 @@ use std::sync::Arc;
 
 use core::cancel_token::CancelToken;
 use core::skill_store::{default_db_path, migrate_legacy_db_if_needed, SkillStore};
-use tauri::menu::{Menu, MenuItem};
-use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::Manager;
 use tauri_plugin_log::{Target, TargetKind};
-
-/// The scheduled update task launches this same executable with these arguments.
-/// Such an invocation runs headless and must never put a window on screen.
-const BACKGROUND_TASK_MARKER: [&str; 2] = ["--background-task", "update-skills"];
-
-fn is_background_task_args<I, S>(args: I) -> bool
-where
-    I: IntoIterator<Item = S>,
-    S: AsRef<str>,
-{
-    args.into_iter()
-        .map(|arg| arg.as_ref().to_owned())
-        .collect::<Vec<_>>()
-        .windows(2)
-        .any(|pair| pair[0] == BACKGROUND_TASK_MARKER[0] && pair[1] == BACKGROUND_TASK_MARKER[1])
-}
-
-/// Windows declared in the config are created before `setup` runs, so a background run
-/// cannot hide them in time: a visible window would appear and then sit frozen because
-/// `setup` runs the whole update synchronously. Marking them as not created is the only
-/// way to keep the run headless, and it also skips booting WebView2 and the web app.
-fn disable_window_creation(config: &mut tauri::Config) {
-    for window in config.app.windows.iter_mut() {
-        window.create = false;
-    }
-}
 
 fn runtime_context() -> tauri::Context<tauri::Wry> {
     let context = tauri::generate_context!();
@@ -46,85 +18,7 @@ fn runtime_context() -> tauri::Context<tauri::Wry> {
         }
         context
     };
-    let mut context = context;
-    if is_background_task_args(std::env::args()) {
-        disable_window_creation(context.config_mut());
-    }
     context
-}
-
-const TRAY_ID: &str = "skills-hub-tray";
-const TRAY_MENU_SHOW: &str = "tray-show";
-const TRAY_MENU_QUIT: &str = "tray-quit";
-
-/// The tray menu is native window-manager text, so it cannot come from the web i18n
-/// bundle. The frontend pushes the active interface language once it has loaded.
-fn tray_labels(language: &str) -> (&'static str, &'static str) {
-    match language {
-        "zh" => ("显示主窗口", "退出 Skills Hub"),
-        "ko" => ("Skills Hub 열기", "Skills Hub 종료"),
-        _ => ("Show Skills Hub", "Quit Skills Hub"),
-    }
-}
-
-fn build_tray_menu<R: tauri::Runtime>(
-    app: &tauri::AppHandle<R>,
-    language: &str,
-) -> tauri::Result<Menu<R>> {
-    let (show, quit) = tray_labels(language);
-    let show_item = MenuItem::with_id(app, TRAY_MENU_SHOW, show, true, None::<&str>)?;
-    let quit_item = MenuItem::with_id(app, TRAY_MENU_QUIT, quit, true, None::<&str>)?;
-    Menu::with_items(app, &[&show_item, &quit_item])
-}
-
-fn show_main_window<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.show();
-        let _ = window.unminimize();
-        let _ = window.set_focus();
-    }
-}
-
-/// The tray must exist before the close button can hide the window, otherwise the app
-/// would become unreachable. Callers therefore treat a missing tray as "not hidden".
-fn setup_tray<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
-    let menu = build_tray_menu(app, "en")?;
-    let mut builder = TrayIconBuilder::with_id(TRAY_ID)
-        .menu(&menu)
-        .show_menu_on_left_click(false)
-        .tooltip("Skills Hub")
-        .on_menu_event(|app, event| match event.id().as_ref() {
-            TRAY_MENU_SHOW => show_main_window(app),
-            TRAY_MENU_QUIT => app.exit(0),
-            _ => {}
-        })
-        .on_tray_icon_event(|tray, event| {
-            if let TrayIconEvent::Click {
-                button: MouseButton::Left,
-                button_state: MouseButtonState::Up,
-                ..
-            } = event
-            {
-                show_main_window(tray.app_handle());
-            }
-        });
-    if let Some(icon) = app.default_window_icon().cloned() {
-        builder = builder.icon(icon);
-    }
-    builder.build(app)?;
-    Ok(())
-}
-
-/// Re-labels the tray menu for the interface language the web app is currently using.
-pub(crate) fn apply_tray_language<R: tauri::Runtime>(
-    app: &tauri::AppHandle<R>,
-    language: &str,
-) -> Result<(), String> {
-    let Some(tray) = app.tray_by_id(TRAY_ID) else {
-        return Ok(());
-    };
-    let menu = build_tray_menu(app, language).map_err(|err| err.to_string())?;
-    tray.set_menu(Some(menu)).map_err(|err| err.to_string())
 }
 
 fn init_store<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> anyhow::Result<SkillStore> {
@@ -157,7 +51,10 @@ pub fn run() {
                     .build(),
             )?;
 
-            let is_background_update = is_background_task_args(std::env::args());
+            let is_background_update = std::env::args()
+                .collect::<Vec<_>>()
+                .windows(2)
+                .any(|pair| pair[0] == "--background-task" && pair[1] == "update-skills");
             let force_background_update = std::env::args().any(|arg| arg == "--force");
 
             let store = init_store(app.handle()).map_err(tauri::Error::from)?;
@@ -307,12 +204,6 @@ pub fn run() {
                 std::thread::sleep(std::time::Duration::from_secs(24 * 60 * 60));
             });
 
-            if let Err(error) = setup_tray(app.handle()) {
-                // Without a tray the window must not hide on close, or the app would be
-                // unreachable. `on_window_event` already falls back to quitting.
-                log::warn!("tray icon setup failed: {error:#}");
-            }
-
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -384,8 +275,6 @@ pub fn run() {
             commands::get_device_sync_status,
             commands::check_device_sync,
             commands::run_device_sync,
-            commands::pull_device_sync,
-            commands::push_device_sync,
             commands::get_device_sync_history,
             commands::get_device_sync_devices,
             commands::set_device_sync_device_alias,
@@ -399,19 +288,11 @@ pub fn run() {
             commands::resolve_device_sync_conflict,
             commands::restore_device_sync_trash,
             commands::disconnect_device_sync,
-            commands::cancel_current_operation,
-            commands::set_tray_language
+            commands::cancel_current_operation
         ])
         .on_window_event(|window, event| {
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                // Closing keeps the app running in the notification area so scheduled
-                // updates and device sync stay alive. Quit from the tray menu instead.
-                if window.app_handle().tray_by_id(TRAY_ID).is_some() {
-                    api.prevent_close();
-                    let _ = window.hide();
-                } else {
-                    window.app_handle().exit(0);
-                }
+            if let tauri::WindowEvent::CloseRequested { .. } = event {
+                window.app_handle().exit(0);
             }
         })
         .build(runtime_context())
@@ -433,64 +314,5 @@ mod environment_tests {
         } else {
             assert_eq!(runtime.config().identifier, identifier);
         }
-    }
-}
-
-#[cfg(test)]
-mod background_task_tests {
-    use super::{disable_window_creation, is_background_task_args};
-
-    #[test]
-    fn background_task_invocation_is_detected_anywhere_in_the_arguments() {
-        assert!(is_background_task_args([
-            "--background-task",
-            "update-skills",
-            "--force"
-        ]));
-        assert!(is_background_task_args([
-            "--force",
-            "--background-task",
-            "update-skills"
-        ]));
-        assert!(is_background_task_args([
-            "--background-task",
-            "update-skills"
-        ]));
-    }
-
-    #[test]
-    fn ordinary_launches_and_near_misses_are_not_background_tasks() {
-        assert!(!is_background_task_args(Vec::<String>::new()));
-        assert!(!is_background_task_args(["--force"]));
-        assert!(!is_background_task_args(["--background-task"]));
-        assert!(!is_background_task_args([
-            "update-skills",
-            "--background-task"
-        ]));
-        assert!(!is_background_task_args([
-            "--background-task",
-            "something-else"
-        ]));
-    }
-
-    #[test]
-    fn background_task_run_never_creates_the_packaged_window() {
-        let mut config: tauri::Config =
-            serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
-        assert!(
-            !config.app.windows.is_empty(),
-            "the packaged config is expected to declare a window"
-        );
-        assert!(
-            config.app.windows.iter().all(|window| window.create),
-            "windows declared in the packaged config are created by default"
-        );
-
-        disable_window_creation(&mut config);
-
-        assert!(
-            config.app.windows.iter().all(|window| !window.create),
-            "a background run must not create any window"
-        );
     }
 }
