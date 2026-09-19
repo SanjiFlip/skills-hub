@@ -1791,13 +1791,6 @@ pub async fn get_github_proxy_url(store: State<'_, SkillStore>) -> Result<String
         .map_err(format_anyhow_error)
 }
 
-/// The tray menu labels are native text and live in `lib.rs`; the web app reports which
-/// interface language is active so they can match the rest of the UI.
-#[tauri::command]
-pub fn set_tray_language(app: tauri::AppHandle, language: String) -> Result<(), String> {
-    crate::apply_tray_language(&app, &language)
-}
-
 #[tauri::command]
 #[allow(non_snake_case)]
 pub async fn set_github_proxy_url(
@@ -2100,21 +2093,9 @@ fn now_ms() -> i64 {
     now.as_millis() as i64
 }
 
-/// A Skill *is* its folder in the central repository. When that folder is gone the record
-/// is hollow, so it must not be reported as healthy — not even when the Skill has no
-/// external source, which otherwise short-circuits the status check.
-fn central_path_missing(skill: &SkillRecord) -> bool {
-    expand_home_path(&skill.central_path)
-        .map(|path| !path.exists())
-        .unwrap_or(true)
-}
-
 fn managed_skill_status(skill: &SkillRecord) -> String {
     if skill.status != "ok" {
         return skill.status.clone();
-    }
-    if central_path_missing(skill) {
-        return "error".to_string();
     }
     if skill.source_type != "local" || skill.has_unbound_local_source() {
         return skill.status.clone();
@@ -2139,9 +2120,7 @@ fn get_managed_skills_impl(store: &SkillStore) -> Result<Vec<ManagedSkillDto>, S
         .into_iter()
         .map(|skill| {
             let source_check = checks.get(&skill.id);
-            let source_error = source_check
-                .and_then(|check| check.0.clone())
-                .or_else(|| central_path_missing(&skill).then(|| "centralMissing".to_string()));
+            let source_error = source_check.and_then(|check| check.0.clone());
             let status = if source_error.is_some() {
                 "error".into()
             } else {
@@ -2672,38 +2651,6 @@ pub async fn run_device_sync(
         let (workspace, central) = device_sync_paths(&app, &store)?;
         let credentials = SystemCredentialStore;
         DeviceSyncService::new(&store, &credentials, workspace, central).sync()
-    })
-    .await
-    .map_err(|_| "DEVICE_SYNC_FAILURE_unknown".to_string())?
-    .map_err(crate::core::device_sync::errors::format_error)
-}
-
-#[tauri::command]
-pub async fn pull_device_sync(
-    app: tauri::AppHandle,
-    store: State<'_, SkillStore>,
-) -> Result<SyncRunResult, String> {
-    let store = store.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        let (workspace, central) = device_sync_paths(&app, &store)?;
-        let credentials = SystemCredentialStore;
-        DeviceSyncService::new(&store, &credentials, workspace, central).pull_from_repository()
-    })
-    .await
-    .map_err(|_| "DEVICE_SYNC_FAILURE_unknown".to_string())?
-    .map_err(crate::core::device_sync::errors::format_error)
-}
-
-#[tauri::command]
-pub async fn push_device_sync(
-    app: tauri::AppHandle,
-    store: State<'_, SkillStore>,
-) -> Result<SyncRunResult, String> {
-    let store = store.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        let (workspace, central) = device_sync_paths(&app, &store)?;
-        let credentials = SystemCredentialStore;
-        DeviceSyncService::new(&store, &credentials, workspace, central).push_to_repository()
     })
     .await
     .map_err(|_| "DEVICE_SYNC_FAILURE_unknown".to_string())?

@@ -4,28 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-## [0.10.3] - 2026-09-17
-
-### Added
-- **Explicit one-way device sync**: Device Sync gained "Pull from repository" and "Push to repository". Pull copies every Skill the repository holds into this library; push writes this library into the repository. Both only add and update — neither deletes — so the direction is always explicit and a one-way action can never remove content. The automatic merge stays the only path that resolves deletions.
-
 ### Fixed
-- **Device sync no longer deletes content it cannot read**: A Skill whose folder in the central library is missing is skipped when the library is exported, so it never reached the local manifest. The merge read that as "deleted on this computer" and deleted the copy in the repository, pushing the deletion, and the resulting remote deletion then removed the record locally — a library that lost its content could therefore empty the repository too. Those Skills are now reported to the merge, which restores them from the repository instead of deleting anything.
-- **Recovering a library from the central repository**: Skills that still exist in the central repository are offered for import again when the library has no record of them. A cleared or lost database previously left that content unreachable — every tool mirror is a link into the central repository, so tool scans skipped it, and adding the folder by hand failed with `skill already exists in central repo`. A central folder whose content matches the folder being added is now adopted in place, without copying it or creating a duplicate, and the central repository is offered as a discovery source that can be switched off like any other. A folder whose content differs is still rejected.
-- **Hollow Skills are reported instead of looking healthy**: A managed Skill whose folder in the central repository is missing now reports that as its own issue instead of appearing usable, including Skills that have no external source — that case previously short-circuited the status check and showed a green state for a Skill whose content was gone. Adopting a folder for a name that already has such a record repairs that record by re-pointing it at the folder that exists, so its tags, enabled state and tool targets survive and no duplicate Skill is created.
-- **Deleting a Skill whose content is already gone**: Removing a Skill whose folder in the central repository no longer exists failed every time with `Skill content is missing`, leaving a record the user could neither use nor get rid of. There is nothing to keep in the recycle bin in that case, so the record and its tool links are now removed instead. A device-sync peer that still holds the Skill restores it, with content, on the next sync.
-
-## [0.10.2] - 2026-09-17
-
-### Added
-- **Notification-area icon**: Skills Hub now shows a tray icon with "Show Skills Hub" and "Quit Skills Hub". Left-clicking the icon restores the window, and the menu labels follow the interface language.
-
-### Changed
-- **Closing hides to the tray**: The window's close button no longer quits the app. It hides the window so scheduled updates and device sync keep running in the background; use the tray menu to quit. If the tray icon cannot be created, closing still quits so the app can never become unreachable.
-
-### Fixed
-- **Hidden background updates**: Scheduled and manual automatic-update runs no longer put a window on screen. A background run previously created the window declared in the configuration before `setup` and then ran the whole update behind it, leaving a visible, unresponsive window for the duration of every update. It now skips creating that window entirely, which also avoids booting WebView2 and the web app for a headless run. "Update now" performs the update inside the running app instead of asking the operating-system scheduler to start a second instance of it, and SQLite connections wait for a concurrent writer instead of failing immediately.
-- **Automatic-update task registration**: "Update now" no longer re-registers the operating-system schedule. It previously registered the task unconditionally, which re-created it even when automatic updates were switched off — so updates kept running, with a window, behind the user's back. Only the automatic-update setting installs or removes that task now.
+- **Visible frozen window during automatic updates**: The update run by the scheduled background task, and "Update now" in the update menu, no longer put a window on screen. Background runs are detected before the app is built and skip creating the windows declared in `tauri.conf.json`, which is the only point where the packaged window can be suppressed, and "Update now" now runs inside the running app instead of asking the operating-system scheduler to start a second instance. That action also no longer re-registers the scheduled task, so switching automatic updates off is respected instead of being undone by the next manual update. Connections waiting on a concurrent SQLite writer now wait for it instead of failing immediately with `SQLITE_BUSY` (fixes [#152](https://github.com/qufei1993/skills-hub/issues/152)).
 
 ## [0.10.1] - 2026-09-13
 
@@ -295,9 +275,7 @@ All notable changes to this project will be documented in this file.
 ### Performance
 - Git import and batch install optimizations: cached clones reduce repeated fetches; timeouts and non‑interactive git improve stability.
 
-[Unreleased]: https://github.com/qufei1993/skills-hub/compare/v0.10.3...HEAD
-[0.10.3]: https://github.com/qufei1993/skills-hub/compare/v0.10.2...v0.10.3
-[0.10.2]: https://github.com/qufei1993/skills-hub/compare/v0.10.1...v0.10.2
+[Unreleased]: https://github.com/qufei1993/skills-hub/compare/v0.10.1...HEAD
 [0.10.1]: https://github.com/qufei1993/skills-hub/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/qufei1993/skills-hub/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/qufei1993/skills-hub/compare/v0.9.0...v0.9.1
