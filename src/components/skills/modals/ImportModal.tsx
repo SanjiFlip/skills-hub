@@ -141,9 +141,7 @@ const ImportModal = ({
                         : t('claudePluginSource', {
                             plugin: variant.plugin_name,
                           })
-                      : variant.tool === 'central_repo'
-                        ? t('centralRepoSource')
-                        : `${t('foundIn')} ${variant.tool}`
+                      : `${t('foundIn')} ${variant.tool}`
 
                     return (
                       <div
